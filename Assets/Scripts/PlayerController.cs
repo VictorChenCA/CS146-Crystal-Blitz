@@ -39,7 +39,6 @@ public class PlayerController : NetworkBehaviour
         Position.OnValueChanged  += OnPositionChanged;
         TeamIndex.OnValueChanged += OnTeamChanged;
 
-        // Apply whatever team colour is already set (e.g. late-joining client).
         ApplyTeamColor(TeamIndex.Value);
 
         if (!IsOwner)
@@ -50,6 +49,7 @@ public class PlayerController : NetworkBehaviour
 
         CameraFollow cam = Camera.main?.GetComponent<CameraFollow>();
         cam?.SetTarget(transform);
+        cam?.SetTeam(TeamIndex.Value);   // set correct camera angle immediately
     }
 
     public override void OnNetworkDespawn()
@@ -67,6 +67,8 @@ public class PlayerController : NetworkBehaviour
     private void OnTeamChanged(int previous, int current)
     {
         ApplyTeamColor(current);
+        if (IsOwner)
+            Camera.main?.GetComponent<CameraFollow>()?.SetTeam(current);
     }
 
     private void ApplyTeamColor(int team)
