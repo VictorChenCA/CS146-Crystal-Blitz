@@ -183,6 +183,6 @@ public class ProjectileShooter : NetworkBehaviour
         netObj.Spawn(true);
 
         ProjectileController controller = proj.GetComponent<ProjectileController>();
-        controller.Initialize(endPos, projectileSpeed);
+        controller.Initialize(endPos, projectileSpeed, OwnerClientId);
     }
 }

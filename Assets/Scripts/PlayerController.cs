@@ -16,17 +16,31 @@ public class PlayerController : NetworkBehaviour
     private static readonly Vector3 LaneForward = new Vector3(1f, 0f, 1f).normalized;
     private static readonly Vector3 LaneRight   = new Vector3(1f, 0f, -1f).normalized;
 
-    // Server-written, synced to all clients.
+    private static readonly Color[] TeamColors =
+    {
+        new Color(0.2f, 0.4f, 0.9f),  // 0 = Blue
+        new Color(0.9f, 0.2f, 0.2f),  // 1 = Red
+    };
+
     public NetworkVariable<Vector3> Position = new NetworkVariable<Vector3>(
         Vector3.zero,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
 
+    public NetworkVariable<int> TeamIndex = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     public override void OnNetworkSpawn()
     {
-        // Register on every instance so non-owners track the NetworkVariable.
-        Position.OnValueChanged += OnPositionChanged;
+        Position.OnValueChanged  += OnPositionChanged;
+        TeamIndex.OnValueChanged += OnTeamChanged;
+
+        // Apply whatever team colour is already set (e.g. late-joining client).
+        ApplyTeamColor(TeamIndex.Value);
 
         if (!IsOwner)
         {
@@ -40,20 +54,51 @@ public class PlayerController : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
-        Position.OnValueChanged -= OnPositionChanged;
+        Position.OnValueChanged  -= OnPositionChanged;
+        TeamIndex.OnValueChanged -= OnTeamChanged;
     }
 
     private void OnPositionChanged(Vector3 previous, Vector3 current)
     {
-        // Owner moves locally (client prediction) so only non-owners apply this.
         if (!IsOwner)
             transform.position = current;
+    }
+
+    private void OnTeamChanged(int previous, int current)
+    {
+        ApplyTeamColor(current);
+    }
+
+    private void ApplyTeamColor(int team)
+    {
+        var r = GetComponent<Renderer>();
+        if (r == null) return;
+        var block = new MaterialPropertyBlock();
+        block.SetColor("_BaseColor", TeamColors[Mathf.Clamp(team, 0, TeamColors.Length - 1)]);
+        r.SetPropertyBlock(block);
     }
 
     private void Update()
     {
         if (Keyboard.current == null) return;
+        HandleTeamSwitch();
+        HandleMovement();
+    }
 
+    private void HandleTeamSwitch()
+    {
+        if (Keyboard.current.oKey.wasPressedThisFrame) ChangeTeamServerRpc(0);
+        if (Keyboard.current.pKey.wasPressedThisFrame) ChangeTeamServerRpc(1);
+    }
+
+    [Rpc(SendTo.Server)]
+    private void ChangeTeamServerRpc(int team, RpcParams rpcParams = default)
+    {
+        TeamIndex.Value = team;
+    }
+
+    private void HandleMovement()
+    {
         float fwdInput   = 0f;
         float rightInput = 0f;
 
@@ -67,10 +112,7 @@ public class PlayerController : NetworkBehaviour
         Vector3 move   = (LaneForward * fwdInput + LaneRight * rightInput).normalized;
         Vector3 newPos = ClampToLane(transform.position + move * moveSpeed * Time.deltaTime);
 
-        // Move locally immediately so the owner feels no lag.
         transform.position = newPos;
-
-        // Ask server to record and broadcast the new position.
         SubmitPositionServerRpc(newPos);
     }
 

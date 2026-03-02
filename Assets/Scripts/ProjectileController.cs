@@ -14,13 +14,17 @@ public class ProjectileController : NetworkBehaviour
             NetworkVariableWritePermission.Server);
 
     private bool _initialized;
+    private ulong _shooterClientId;
+
+    [SerializeField] private float hitRadius = 0.6f;
 
     // Called by server after NetworkObject.Spawn()
-    public void Initialize(Vector3 endPosition, float speed)
+    public void Initialize(Vector3 endPosition, float speed, ulong shooterClientId)
     {
-        _netEndPos.Value = endPosition;
-        _netSpeed.Value = speed;
-        _initialized = true;
+        _netEndPos.Value  = endPosition;
+        _netSpeed.Value   = speed;
+        _shooterClientId  = shooterClientId;
+        _initialized      = true;
     }
 
     public override void OnNetworkSpawn()
@@ -34,15 +38,27 @@ public class ProjectileController : NetworkBehaviour
         if (!_initialized) return;
 
         float step = _netSpeed.Value * Time.deltaTime;
-        transform.position = Vector3.MoveTowards(
-            transform.position,
-            _netEndPos.Value,
-            step
-        );
+        transform.position = Vector3.MoveTowards(transform.position, _netEndPos.Value, step);
 
-        if (IsServer && Vector3.Distance(transform.position, _netEndPos.Value) < 0.01f)
+        if (!IsServer) return;
+
+        // Check for player hits (server-authoritative, no collider needed on projectile).
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
         {
-            NetworkObject.Despawn(true);
+            if (client.ClientId == _shooterClientId) continue;   // no self-damage
+
+            var playerObj = client.PlayerObject;
+            if (playerObj == null) continue;
+
+            if (Vector3.Distance(transform.position, playerObj.transform.position) < hitRadius)
+            {
+                playerObj.GetComponent<PlayerHealth>()?.TakeDamage(25f);
+                NetworkObject.Despawn(true);
+                return;
+            }
         }
+
+        if (Vector3.Distance(transform.position, _netEndPos.Value) < 0.01f)
+            NetworkObject.Despawn(true);
     }
 }

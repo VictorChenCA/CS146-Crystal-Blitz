@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 3758207430799448634}
   - component: {fileID: 3583912591448087394}
   - component: {fileID: 9065941875211792016}
+  - component: {fileID: 9173006632108536911}
   m_Layer: 0
   m_Name: GamePlayer
   m_TagString: Untagged
@@ -210,6 +211,8 @@ MonoBehaviour:
   halfLaneWidth: 14
   Position:
     m_InternalValue: {x: 0, y: 0, z: 0}
+  TeamIndex:
+    m_InternalValue: 0
 --- !u!114 &9065941875211792016
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -228,6 +231,22 @@ MonoBehaviour:
   projectileSpeed: 30
   maxRange: 20
   fireCooldown: 2
+--- !u!114 &9173006632108536911
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3733706192183858795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 259909e2366bd4e1aa64c6ecec937ab1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
+  ShowTopMostFoldoutHeaderGroup: 1
+  maxHealth: 100
+  Health:
+    m_InternalValue: 100
 --- !u!1 &8598427067344695647
 GameObject:
   m_ObjectHideFlags: 0
