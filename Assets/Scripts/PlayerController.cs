@@ -13,12 +13,21 @@ public class PlayerController : NetworkBehaviour
     [SerializeField] private float maxLane = 30f;
     [SerializeField] private float halfLaneWidth = 3f;
 
-    // Lane is diagonal: bottom-left (-X,-Z) to top-right (+X,+Z)
     private static readonly Vector3 LaneForward = new Vector3(1f, 0f, 1f).normalized;
     private static readonly Vector3 LaneRight   = new Vector3(1f, 0f, -1f).normalized;
 
+    // Server-written, synced to all clients.
+    public NetworkVariable<Vector3> Position = new NetworkVariable<Vector3>(
+        Vector3.zero,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     public override void OnNetworkSpawn()
     {
+        // Register on every instance so non-owners track the NetworkVariable.
+        Position.OnValueChanged += OnPositionChanged;
+
         if (!IsOwner)
         {
             enabled = false;
@@ -27,17 +36,21 @@ public class PlayerController : NetworkBehaviour
 
         CameraFollow cam = Camera.main?.GetComponent<CameraFollow>();
         cam?.SetTarget(transform);
+    }
 
-        EnforceLane();
+    public override void OnNetworkDespawn()
+    {
+        Position.OnValueChanged -= OnPositionChanged;
+    }
+
+    private void OnPositionChanged(Vector3 previous, Vector3 current)
+    {
+        // Owner moves locally (client prediction) so only non-owners apply this.
+        if (!IsOwner)
+            transform.position = current;
     }
 
     private void Update()
-    {
-        HandleMovement();
-        EnforceLane();
-    }
-
-    private void HandleMovement()
     {
         if (Keyboard.current == null) return;
 
@@ -51,23 +64,30 @@ public class PlayerController : NetworkBehaviour
 
         if (fwdInput == 0f && rightInput == 0f) return;
 
-        Vector3 move = (LaneForward * fwdInput + LaneRight * rightInput).normalized;
-        transform.Translate(move * moveSpeed * Time.deltaTime, Space.World);
+        Vector3 move   = (LaneForward * fwdInput + LaneRight * rightInput).normalized;
+        Vector3 newPos = ClampToLane(transform.position + move * moveSpeed * Time.deltaTime);
+
+        // Move locally immediately so the owner feels no lag.
+        transform.position = newPos;
+
+        // Ask server to record and broadcast the new position.
+        SubmitPositionServerRpc(newPos);
     }
 
-    private void EnforceLane()
+    [Rpc(SendTo.Server)]
+    private void SubmitPositionServerRpc(Vector3 newPosition, RpcParams rpcParams = default)
     {
-        Vector3 pos = transform.position;
+        transform.position = newPosition;
+        Position.Value     = newPosition;
+    }
 
-        float fwd   = Vector3.Dot(pos, LaneForward);
-        float right = Vector3.Dot(pos, LaneRight);
-
-        fwd   = Mathf.Clamp(fwd,   minLane,        maxLane);
-        right = Mathf.Clamp(right, -halfLaneWidth,  halfLaneWidth);
-
-        pos   = LaneForward * fwd + LaneRight * right;
-        pos.y = groundY;
-        transform.position = pos;
+    private Vector3 ClampToLane(Vector3 pos)
+    {
+        float fwd   = Mathf.Clamp(Vector3.Dot(pos, LaneForward), minLane, maxLane);
+        float right = Mathf.Clamp(Vector3.Dot(pos, LaneRight), -halfLaneWidth, halfLaneWidth);
+        Vector3 clamped = LaneForward * fwd + LaneRight * right;
+        clamped.y = groundY;
+        return clamped;
     }
 
     private void OnDrawGizmos()
