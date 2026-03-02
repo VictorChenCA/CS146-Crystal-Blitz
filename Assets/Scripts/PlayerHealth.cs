@@ -1,10 +1,13 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 using Unity.Netcode;
 
 public class PlayerHealth : NetworkBehaviour
 {
     [SerializeField] private float maxHealth = 100f;
+    [SerializeField] private float respawnDelay = 3f;
 
     public NetworkVariable<float> Health = new NetworkVariable<float>(
         100f,
@@ -12,9 +15,11 @@ public class PlayerHealth : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
-    private Image _healthFill;
-    private Transform _barCanvas;
-    private Camera _cam;
+    private Image          _greenFill;
+    private TextMeshProUGUI _healthText;
+    private Transform      _barCanvas;
+    private Camera         _cam;
+    private bool           _isDead;
 
     public override void OnNetworkSpawn()
     {
@@ -28,16 +33,36 @@ public class PlayerHealth : NetworkBehaviour
         Health.OnValueChanged -= OnHealthChanged;
     }
 
-    // Called directly by the server (e.g. ProjectileController hit detection).
     public void TakeDamage(float amount)
     {
-        if (!IsServer) return;
+        if (!IsServer || _isDead) return;
+
         Health.Value = Mathf.Max(0f, Health.Value - amount);
+
+        if (Health.Value <= 0f)
+        {
+            _isDead = true;
+            StartCoroutine(DespawnAndRespawn(OwnerClientId));
+        }
+    }
+
+    private IEnumerator DespawnAndRespawn(ulong clientId)
+    {
+        NetworkObject.Despawn(false);
+
+        yield return new WaitForSeconds(respawnDelay);
+
+        var prefab   = NetworkManager.Singleton.NetworkConfig.PlayerPrefab;
+        var spawnPos = new Vector3(0f, 1f, 0f);
+        var go       = Instantiate(prefab, spawnPos, Quaternion.identity);
+        go.GetComponent<NetworkObject>().SpawnAsPlayerObject(clientId, true);
+
+        Destroy(gameObject);
     }
 
     private void OnHealthChanged(float previous, float current)
     {
-        UpdateFill(current);
+        UpdateBar(current);
     }
 
     private void LateUpdate()
@@ -46,58 +71,68 @@ public class PlayerHealth : NetworkBehaviour
         if (_cam == null) _cam = Camera.main;
         if (_cam == null) return;
 
-        // Billboard — face the camera so the bar is always readable.
         _barCanvas.LookAt(_cam.transform);
         _barCanvas.Rotate(0f, 180f, 0f);
     }
 
-    private void UpdateFill(float current)
+    private void UpdateBar(float current)
     {
-        if (_healthFill == null) return;
-        float t = Mathf.Clamp01(current / maxHealth);
-        _healthFill.fillAmount = t;
-        _healthFill.color = Color.Lerp(Color.red, Color.green, t);
+        if (_greenFill != null)
+            _greenFill.fillAmount = Mathf.Clamp01(current / maxHealth);
+
+        if (_healthText != null)
+            _healthText.text = $"{Mathf.RoundToInt(current)}/{Mathf.RoundToInt(maxHealth)}";
     }
 
     private void CreateHealthBar()
     {
-        // World-space canvas parented to the player, positioned above the head.
+        // World-space canvas: 100×14 rect units × 0.01 scale = 1.0 × 0.14 world units.
         var canvasGO = new GameObject("HealthBarCanvas");
         canvasGO.transform.SetParent(transform);
         canvasGO.transform.localPosition = new Vector3(0f, 1.4f, 0f);
-        // Scale down so a 100×14 RectTransform = 1.0 × 0.14 world units.
-        canvasGO.transform.localScale = Vector3.one * 0.01f;
+        canvasGO.transform.localScale    = Vector3.one * 0.01f;
         _barCanvas = canvasGO.transform;
 
         var canvas = canvasGO.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
+        canvasGO.GetComponent<RectTransform>().sizeDelta = new Vector2(100f, 14f);
 
-        var rt = canvasGO.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(100f, 14f);
+        // --- Layer 1: dark background ---
+        MakeFullRect(canvasGO, "Background")
+            .AddComponent<Image>().color = new Color(0.08f, 0.08f, 0.08f, 0.9f);
 
-        // Dark background
-        var bgGO = new GameObject("Background");
-        bgGO.transform.SetParent(canvasGO.transform, false);
-        var bgRect = bgGO.AddComponent<RectTransform>();
-        bgRect.anchorMin = Vector2.zero;
-        bgRect.anchorMax = Vector2.one;
-        bgRect.offsetMin = Vector2.zero;
-        bgRect.offsetMax = Vector2.zero;
-        bgGO.AddComponent<Image>().color = new Color(0.1f, 0.1f, 0.1f, 0.85f);
+        // --- Layer 2: red bar (full width — always visible as "missing health") ---
+        MakeFullRect(canvasGO, "RedBar")
+            .AddComponent<Image>().color = new Color(0.82f, 0.18f, 0.18f);
 
-        // Coloured fill (Filled mode — shrinks from right as health drops)
-        var fillGO = new GameObject("Fill");
-        fillGO.transform.SetParent(canvasGO.transform, false);
-        var fillRect = fillGO.AddComponent<RectTransform>();
-        fillRect.anchorMin = Vector2.zero;
-        fillRect.anchorMax = Vector2.one;
-        fillRect.offsetMin = Vector2.zero;
-        fillRect.offsetMax = Vector2.zero;
-        _healthFill = fillGO.AddComponent<Image>();
-        _healthFill.type        = Image.Type.Filled;
-        _healthFill.fillMethod  = Image.FillMethod.Horizontal;
-        _healthFill.fillOrigin  = 0;
+        // --- Layer 3: green fill (shrinks from right as health drops) ---
+        var greenGO   = MakeFullRect(canvasGO, "GreenFill");
+        _greenFill    = greenGO.AddComponent<Image>();
+        _greenFill.color      = new Color(0.18f, 0.78f, 0.18f);
+        _greenFill.type       = Image.Type.Filled;
+        _greenFill.fillMethod = Image.FillMethod.Horizontal;
+        _greenFill.fillOrigin = 0;   // grow from left
 
-        UpdateFill(Health.Value);
+        // --- Layer 4: text label ("90/100") ---
+        var textGO   = MakeFullRect(canvasGO, "HealthText");
+        _healthText  = textGO.AddComponent<TextMeshProUGUI>();
+        _healthText.alignment  = TextAlignmentOptions.Center;
+        _healthText.color      = Color.white;
+        _healthText.fontSize   = 8f;
+        _healthText.fontStyle  = FontStyles.Bold;
+
+        UpdateBar(Health.Value);
+    }
+
+    // Helper: create a child whose RectTransform stretches to fill the parent.
+    private static GameObject MakeFullRect(GameObject parent, string name)
+    {
+        var go   = new GameObject(name);
+        go.transform.SetParent(parent.transform, false);
+        var rect = go.AddComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = rect.offsetMax = Vector2.zero;
+        return go;
     }
 }

@@ -9,6 +9,7 @@ public class ProjectileShooter : NetworkBehaviour
     [SerializeField] private Transform firePoint;
     [SerializeField] private float projectileSpeed = 15f;
     [SerializeField] private float maxRange = 20f;
+    [SerializeField] private float damage = 25f;
 
     [Header("Cooldown")]
     [SerializeField] private float fireCooldown = 2f;
@@ -80,7 +81,7 @@ public class ProjectileShooter : NetworkBehaviour
 
         targetPos = new Vector3(fp.x + flat.x, fp.y, fp.z + flat.z);
 
-        FireProjectileServerRpc(fp, targetPos);
+        FireProjectileServerRpc(fp, targetPos, damage);
         _nextFireTime = Time.time + fireCooldown;
     }
 
@@ -176,13 +177,13 @@ public class ProjectileShooter : NetworkBehaviour
     }
 
     [ServerRpc]
-    private void FireProjectileServerRpc(Vector3 startPos, Vector3 endPos)
+    private void FireProjectileServerRpc(Vector3 startPos, Vector3 endPos, float damageAmount)
     {
         GameObject proj = Instantiate(projectilePrefab, startPos, Quaternion.identity);
         NetworkObject netObj = proj.GetComponent<NetworkObject>();
         netObj.Spawn(true);
 
         ProjectileController controller = proj.GetComponent<ProjectileController>();
-        controller.Initialize(endPos, projectileSpeed, OwnerClientId);
+        controller.Initialize(endPos, projectileSpeed, OwnerClientId, damageAmount);
     }
 }

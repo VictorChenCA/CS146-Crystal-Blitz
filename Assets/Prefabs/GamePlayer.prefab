@@ -34,7 +34,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 1, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.5, y: 1.5, z: 1.5}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 8689417454509932622}
@@ -204,7 +204,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   ShowTopMostFoldoutHeaderGroup: 1
-  moveSpeed: 10
+  moveSpeed: 8
   groundY: 1
   minLane: -49
   maxLane: 49
@@ -230,7 +230,8 @@ MonoBehaviour:
   firePoint: {fileID: 8689417454509932622}
   projectileSpeed: 30
   maxRange: 20
-  fireCooldown: 2
+  damage: 20
+  fireCooldown: 1
 --- !u!114 &9173006632108536911
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -245,6 +246,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
   ShowTopMostFoldoutHeaderGroup: 1
   maxHealth: 100
+  respawnDelay: 5
   Health:
     m_InternalValue: 100
 --- !u!1 &8598427067344695647

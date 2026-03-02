@@ -15,16 +15,18 @@ public class ProjectileController : NetworkBehaviour
 
     private bool _initialized;
     private ulong _shooterClientId;
+    private float _damage;
 
     [SerializeField] private float hitRadius = 0.6f;
 
     // Called by server after NetworkObject.Spawn()
-    public void Initialize(Vector3 endPosition, float speed, ulong shooterClientId)
+    public void Initialize(Vector3 endPosition, float speed, ulong shooterClientId, float damage)
     {
-        _netEndPos.Value  = endPosition;
-        _netSpeed.Value   = speed;
-        _shooterClientId  = shooterClientId;
-        _initialized      = true;
+        _netEndPos.Value = endPosition;
+        _netSpeed.Value  = speed;
+        _shooterClientId = shooterClientId;
+        _damage          = damage;
+        _initialized     = true;
     }
 
     public override void OnNetworkSpawn()
@@ -52,7 +54,7 @@ public class ProjectileController : NetworkBehaviour
 
             if (Vector3.Distance(transform.position, playerObj.transform.position) < hitRadius)
             {
-                playerObj.GetComponent<PlayerHealth>()?.TakeDamage(25f);
+                playerObj.GetComponent<PlayerHealth>()?.TakeDamage(_damage);
                 NetworkObject.Despawn(true);
                 return;
             }
