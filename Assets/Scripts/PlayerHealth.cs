@@ -103,8 +103,9 @@ public class PlayerHealth : NetworkBehaviour
         // GO alive so the coroutine can finish.
         NetworkObject.Despawn(false);
 
-        // Hide the capsule on the server/host so it doesn't appear on the host's screen.
-        GetComponent<Renderer>()?.gameObject.SetActive(false);
+        // Disable the renderer (not SetActive — that kills the coroutine).
+        var rend = GetComponent<Renderer>();
+        if (rend != null) rend.enabled = false;
         DestroyBar();
 
         yield return new WaitForSeconds(respawnDelay);

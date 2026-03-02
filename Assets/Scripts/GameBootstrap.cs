@@ -1,11 +1,15 @@
 using UnityEngine;
 using Unity.Netcode;
+using Unity.Netcode.Transports.UTP;
 
 public class GameBootstrap : MonoBehaviour
 {
     private float  _deathTimerEnd    = -1f;
     private string _killMessage      = "";
     private float  _killMessageEnd   = -1f;
+
+    private string _hostIp = "127.0.0.1";
+    private ushort _port   = 7777;
 
     private void OnEnable()
     {
@@ -26,17 +30,39 @@ public class GameBootstrap : MonoBehaviour
         _killMessageEnd = Time.time + 4f;
     }
 
+    private void SetTransport(string ip, ushort port)
+    {
+        var t = NetworkManager.Singleton.GetComponent<UnityTransport>();
+        if (t != null) t.SetConnectionData(ip, port);
+    }
+
     private void OnGUI()
     {
         // --- Connection buttons (2x scaled) ---
         GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(2f, 2f, 1f));
 
-        GUILayout.BeginArea(new Rect(10, 10, 200, 200));
+        GUILayout.BeginArea(new Rect(10, 10, 220, 220));
         if (!NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)
         {
-            if (GUILayout.Button("Host"))   NetworkManager.Singleton.StartHost();
-            if (GUILayout.Button("Client")) NetworkManager.Singleton.StartClient();
-            if (GUILayout.Button("Server")) NetworkManager.Singleton.StartServer();
+            GUILayout.Label("Host IP:");
+            _hostIp = GUILayout.TextField(_hostIp, 32);
+
+            // Host / Server listen on all interfaces; Client connects to entered IP.
+            if (GUILayout.Button("Host"))
+            {
+                SetTransport("0.0.0.0", _port);
+                NetworkManager.Singleton.StartHost();
+            }
+            if (GUILayout.Button("Client"))
+            {
+                SetTransport(_hostIp, _port);
+                NetworkManager.Singleton.StartClient();
+            }
+            if (GUILayout.Button("Server"))
+            {
+                SetTransport("0.0.0.0", _port);
+                NetworkManager.Singleton.StartServer();
+            }
         }
         else
         {
@@ -44,6 +70,7 @@ public class GameBootstrap : MonoBehaviour
                         : NetworkManager.Singleton.IsServer ? "Server"
                         : "Client";
             GUILayout.Label($"Mode: {mode}");
+            GUILayout.Label($"IP: {_hostIp}  Port: {_port}");
         }
         GUILayout.EndArea();
 
