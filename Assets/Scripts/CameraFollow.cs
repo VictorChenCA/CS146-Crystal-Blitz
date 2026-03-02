@@ -36,4 +36,44 @@ public class CameraFollow : MonoBehaviour
             smoothSpeed * Time.deltaTime
         );
     }
+
+    private void OnDrawGizmos()
+    {
+        // Use cameraRotation field directly so the gizmo reflects inspector changes
+        // even in Edit mode before Start() has applied the rotation to the transform.
+        Quaternion rot = Quaternion.Euler(cameraRotation);
+
+        Vector3 playerPos = _target != null ? _target.position : transform.position - offset;
+        Vector3 camPos    = playerPos + offset;
+
+        // --- Position ---
+        // Green sphere = player/target
+        Gizmos.color = Color.green;
+        Gizmos.DrawWireSphere(playerPos, 0.3f);
+
+        // Cyan sphere + offset arm
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawWireSphere(camPos, 0.4f);
+        Gizmos.DrawLine(playerPos, camPos);
+
+        // --- Rotation: camera axes drawn from camPos ---
+        // Forward (blue) — where the camera is pointing
+        Gizmos.color = Color.blue;
+        Gizmos.DrawRay(camPos, rot * Vector3.forward * 3f);
+
+        // Up (green)
+        Gizmos.color = Color.green;
+        Gizmos.DrawRay(camPos, rot * Vector3.up * 1.5f);
+
+        // Right (red)
+        Gizmos.color = Color.red;
+        Gizmos.DrawRay(camPos, rot * Vector3.right * 1.5f);
+
+        // --- Frustum — makes the field of view and tilt immediately readable ---
+        Matrix4x4 prev = Gizmos.matrix;
+        Gizmos.matrix = Matrix4x4.TRS(camPos, rot, Vector3.one);
+        Gizmos.color  = new Color(1f, 1f, 1f, 0.15f);
+        Gizmos.DrawFrustum(Vector3.zero, 60f, 12f, 0.3f, 16f / 9f);
+        Gizmos.matrix = prev;
+    }
 }
