@@ -83,6 +83,7 @@ public class ProjectileShooter : NetworkBehaviour
 
         FireProjectileServerRpc(fp, targetPos, damage);
         _nextFireTime = Time.time + fireCooldown;
+        GetComponent<PlayerController>()?.LockMovement(0.5f);
     }
 
     private void UpdateRingPosition()

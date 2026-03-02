@@ -54,7 +54,7 @@ public class ProjectileController : NetworkBehaviour
 
             if (Vector3.Distance(transform.position, playerObj.transform.position) < hitRadius)
             {
-                playerObj.GetComponent<PlayerHealth>()?.TakeDamage(_damage);
+                playerObj.GetComponent<PlayerHealth>()?.TakeDamage(_damage, _shooterClientId);
                 NetworkObject.Despawn(true);
                 return;
             }

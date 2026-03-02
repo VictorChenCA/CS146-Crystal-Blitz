@@ -23,7 +23,9 @@ public class PlayerHealth : NetworkBehaviour
     };
 
     // Fired on the owner's client so GameBootstrap can show the countdown UI.
-    public static event System.Action<float> OnLocalPlayerDeath;
+    public static event System.Action<float>  OnLocalPlayerDeath;
+    // Fired on ALL clients to show the kill feed.
+    public static event System.Action<string> OnKillAnnouncement;
 
     public NetworkVariable<float> Health = new NetworkVariable<float>(
         100f,
@@ -62,7 +64,7 @@ public class PlayerHealth : NetworkBehaviour
 
     // ------------------------------------------------------------------ damage / death
 
-    public void TakeDamage(float amount)
+    public void TakeDamage(float amount, ulong killerClientId = ulong.MaxValue)
     {
         if (!IsServer || _isDead) return;
 
@@ -71,10 +73,19 @@ public class PlayerHealth : NetworkBehaviour
         if (Health.Value <= 0f)
         {
             _isDead = true;
-            // Notify owner BEFORE despawn so the RPC can still be sent.
+            // Both RPCs must be sent BEFORE despawn while NetworkObject is still valid.
             NotifyDeathRpc(respawnDelay);
+            AnnounceKillRpc(killerClientId, OwnerClientId);
             StartCoroutine(DespawnAndRespawn(OwnerClientId));
         }
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void AnnounceKillRpc(ulong killer, ulong victim)
+    {
+        string killerName = killer == ulong.MaxValue ? "Unknown" : $"Player {killer + 1}";
+        string victimName = $"Player {victim + 1}";
+        OnKillAnnouncement?.Invoke($"{killerName} has defeated {victimName}");
     }
 
     [Rpc(SendTo.Owner)]

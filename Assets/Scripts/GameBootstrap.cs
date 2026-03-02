@@ -3,14 +3,27 @@ using Unity.Netcode;
 
 public class GameBootstrap : MonoBehaviour
 {
-    private float _deathTimerEnd = -1f;
+    private float  _deathTimerEnd    = -1f;
+    private string _killMessage      = "";
+    private float  _killMessageEnd   = -1f;
 
-    private void OnEnable()  { PlayerHealth.OnLocalPlayerDeath += HandleLocalPlayerDeath; }
-    private void OnDisable() { PlayerHealth.OnLocalPlayerDeath -= HandleLocalPlayerDeath; }
-
-    private void HandleLocalPlayerDeath(float duration)
+    private void OnEnable()
     {
-        _deathTimerEnd = Time.time + duration;
+        PlayerHealth.OnLocalPlayerDeath += HandleLocalPlayerDeath;
+        PlayerHealth.OnKillAnnouncement += HandleKillAnnouncement;
+    }
+
+    private void OnDisable()
+    {
+        PlayerHealth.OnLocalPlayerDeath -= HandleLocalPlayerDeath;
+        PlayerHealth.OnKillAnnouncement -= HandleKillAnnouncement;
+    }
+
+    private void HandleLocalPlayerDeath(float duration)  => _deathTimerEnd  = Time.time + duration;
+    private void HandleKillAnnouncement(string message)
+    {
+        _killMessage    = message;
+        _killMessageEnd = Time.time + 4f;
     }
 
     private void OnGUI()
@@ -36,14 +49,20 @@ public class GameBootstrap : MonoBehaviour
 
         GUI.matrix = Matrix4x4.identity;   // reset before drawing the countdown
 
-        // --- Death countdown (normal scale, centred) ---
+        // --- Kill announcement (top-centre, 4 s) ---
+        if (_killMessageEnd > Time.time)
+        {
+            float w = 420f, h = 44f;
+            GUI.Box(new Rect((Screen.width - w) * 0.5f, 60f, w, h), _killMessage);
+        }
+
+        // --- Death countdown (centre screen) ---
         if (_deathTimerEnd > Time.time)
         {
             int secs = Mathf.CeilToInt(_deathTimerEnd - Time.time);
             float w = 300f, h = 52f;
-            float x = (Screen.width  - w) * 0.5f;
-            float y = (Screen.height - h) * 0.5f;
-            GUI.Box(new Rect(x, y, w, h), $"Respawning in  {secs}...");
+            GUI.Box(new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h),
+                    $"Respawning in {secs}...");
         }
     }
 }

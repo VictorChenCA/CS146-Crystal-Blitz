@@ -16,6 +16,13 @@ public class PlayerController : NetworkBehaviour
     private static readonly Vector3 LaneForward = new Vector3(1f, 0f, 1f).normalized;
     private static readonly Vector3 LaneRight   = new Vector3(1f, 0f, -1f).normalized;
 
+    private float _movementLockUntil;
+
+    public void LockMovement(float duration)
+    {
+        _movementLockUntil = Time.time + duration;
+    }
+
     private static readonly Color[] TeamColors =
     {
         new Color(0.2f, 0.4f, 0.9f),  // 0 = Blue
@@ -101,6 +108,8 @@ public class PlayerController : NetworkBehaviour
 
     private void HandleMovement()
     {
+        if (Time.time < _movementLockUntil) return;
+
         float fwdInput   = 0f;
         float rightInput = 0f;
 
