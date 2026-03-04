@@ -87,8 +87,7 @@ public class ProjectileShooter : NetworkBehaviour
 
         Vector3 fp   = firePoint.position;
         Vector3 flat = new Vector3(hit.x - fp.x, 0f, hit.z - fp.z);
-        if (flat.magnitude > maxRange)
-            flat = flat.normalized * maxRange;
+        flat = flat.magnitude > 0.001f ? flat.normalized * maxRange : Vector3.forward * maxRange;
 
         targetPos = new Vector3(fp.x + flat.x, fp.y, fp.z + flat.z);
         return true;
@@ -198,8 +197,7 @@ public class ProjectileShooter : NetworkBehaviour
         if (GetGroundTarget(out Vector3 targetPos))
         {
             Vector3 flat = new Vector3(targetPos.x - fp.x, 0f, targetPos.z - fp.z);
-            if (flat.magnitude > maxRange)
-                flat = flat.normalized * maxRange;
+            flat = flat.magnitude > 0.001f ? flat.normalized * maxRange : Vector3.forward * maxRange;
             end = new Vector3(fp.x + flat.x, 0.05f, fp.z + flat.z);
         }
 
