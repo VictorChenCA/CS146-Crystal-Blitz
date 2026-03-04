@@ -1,8 +1,13 @@
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
+using Unity.Services.Authentication;
+using Unity.Services.Core;
+using Unity.Services.Relay;
+using Unity.Services.Relay.Models;
 using UnityEngine.InputSystem;
 
 public class GameBootstrap : MonoBehaviour
@@ -15,6 +20,10 @@ public class GameBootstrap : MonoBehaviour
     // ── Networking ───────────────────────────────────────────────────────────
     private string _hostIp = "127.0.0.1";
     private ushort _port   = 7777;
+    private bool   _useRelay   = false;
+    private string _joinCode   = "";
+    private string _relayError = "";
+    private bool   _relayBusy  = false;
 
     // ── Kill / Death HUD ─────────────────────────────────────────────────────
     private float  _deathTimerEnd  = -1f;
@@ -51,6 +60,7 @@ public class GameBootstrap : MonoBehaviour
     private GUIStyle _labelStyle;
     private GUIStyle _hudLabelStyle;
     private GUIStyle _toggleStyle;
+    private GUIStyle _smallToggleStyle;
     private GUIStyle _segActiveStyle;
     private GUIStyle _segInactiveStyle;
     private GUIStyle _panelLabelStyle;
@@ -128,7 +138,10 @@ public class GameBootstrap : MonoBehaviour
 
         // Connection established → enter InGame
         if (_state == UIState.ConnectionScreen && nm != null && (nm.IsClient || nm.IsServer))
+        {
+            _relayBusy = false;
             _state = UIState.InGame;
+        }
 
         bool escPressed = Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
 
@@ -213,36 +226,78 @@ public class GameBootstrap : MonoBehaviour
     {
         GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(2f, 2f, 1f));
 
-        float logW = Screen.width  / 2f;   // logical width  at 2× scale
-        float logH = Screen.height / 2f;
-        float panelW = 220f, panelH = 220f;
+        float logW   = Screen.width  / 2f;
+        float logH   = Screen.height / 2f;
+        float panelW = 220f;
+        float panelH = _useRelay ? 320f : 260f;
         float panelX = (logW - panelW) * 0.5f;
         float panelY = (logH - panelH) * 0.5f;
 
         GUILayout.BeginArea(new Rect(panelX, panelY, panelW, panelH));
 
-        GUILayout.Label("Host IP:", _labelStyle);
-        _hostIp = GUILayout.TextField(_hostIp, 32, _textFieldStyle);
+        _useRelay = GUILayout.Toggle(_useRelay, "Use Relay (Online)", _smallToggleStyle);
+        GUILayout.Space(6f);
 
-        if (GUILayout.Button("Host", _buttonStyle))
+        if (!_useRelay)
         {
-            SetTransport("0.0.0.0", _port);
-            NetworkManager.Singleton.StartHost();
+            // ── LAN mode (unchanged) ─────────────────────────────────────
+            GUILayout.Label("Host IP:", _labelStyle);
+            _hostIp = GUILayout.TextField(_hostIp, 32, _textFieldStyle);
+
+            if (GUILayout.Button("Host", _buttonStyle))
+            {
+                SetTransport("0.0.0.0", _port);
+                NetworkManager.Singleton.StartHost();
+            }
+            if (GUILayout.Button("Client", _buttonStyle))
+            {
+                SetTransport(_hostIp, _port);
+                NetworkManager.Singleton.StartClient();
+            }
+            if (GUILayout.Button("Server", _buttonStyle))
+            {
+                SetTransport("0.0.0.0", _port);
+                NetworkManager.Singleton.StartServer();
+            }
         }
-        if (GUILayout.Button("Client", _buttonStyle))
+        else
         {
-            SetTransport(_hostIp, _port);
-            NetworkManager.Singleton.StartClient();
-        }
-        if (GUILayout.Button("Server", _buttonStyle))
-        {
-            SetTransport("0.0.0.0", _port);
-            NetworkManager.Singleton.StartServer();
+            // ── Relay mode ───────────────────────────────────────────────
+            GUILayout.Label("Join Code:", _labelStyle);
+            string raw = GUILayout.TextField(_joinCode, 10, _textFieldStyle);
+            _joinCode = raw.ToUpperInvariant();
+
+            if (_relayBusy)
+            {
+                GUILayout.Label("Contacting Relay...", _labelStyle);
+            }
+            else
+            {
+                if (GUILayout.Button("Host (Relay)", _buttonStyle))
+                    _ = StartHostWithRelayAsync();
+
+                if (GUILayout.Button("Join (Relay)", _buttonStyle))
+                    _ = StartClientWithRelayAsync(_joinCode);
+
+                if (!string.IsNullOrEmpty(_joinCode) && NetworkManager.Singleton != null
+                    && NetworkManager.Singleton.IsHost)
+                {
+                    GUILayout.Label($"Code: {_joinCode}", _labelStyle);
+                }
+
+                if (!string.IsNullOrEmpty(_relayError))
+                {
+                    Color prev = GUI.color;
+                    GUI.color = Color.red;
+                    GUILayout.Label(_relayError, _labelStyle);
+                    GUI.color = prev;
+                }
+            }
         }
 
         GUILayout.Space(10f);
 
-        if (GUILayout.Button("Back", _buttonStyle))
+        if (!_relayBusy && GUILayout.Button("Back", _buttonStyle))
             _state = UIState.MainMenu;
 
         GUILayout.EndArea();
@@ -405,12 +460,29 @@ public class GameBootstrap : MonoBehaviour
 
         GUILayout.FlexibleSpace();
 
+        // ── Relay join code (host only) ───────────────────────────────────
+        if (_useRelay && !string.IsNullOrEmpty(_joinCode) &&
+            NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
+        {
+            GUILayout.Label("Relay Join Code", _panelLabelStyle);
+            GUILayout.Space(4f);
+            GUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(_joinCode, _panelTitleStyle);
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+            GUILayout.Space(12f);
+        }
+
         var nm = NetworkManager.Singleton;
         if (nm != null && (nm.IsClient || nm.IsServer))
         {
             if (GUILayout.Button("Disconnect & Return to Main Menu", _buttonStyle))
             {
                 nm.Shutdown();
+                _relayBusy  = false;
+                _joinCode   = "";
+                _relayError = "";
                 _state = UIState.MainMenu;
             }
             GUILayout.Space(8f);
@@ -420,6 +492,62 @@ public class GameBootstrap : MonoBehaviour
             _state = _settingsPreviousState;
 
         GUILayout.EndArea();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Relay async helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private async Task InitializeUgsAsync()
+    {
+        if (UnityServices.State == ServicesInitializationState.Uninitialized)
+            await UnityServices.InitializeAsync();
+        if (!AuthenticationService.Instance.IsSignedIn)
+            await AuthenticationService.Instance.SignInAnonymouslyAsync();
+    }
+
+    private async Task StartHostWithRelayAsync()
+    {
+        _relayBusy  = true;
+        _relayError = "";
+        _joinCode   = "";
+        try
+        {
+            await InitializeUgsAsync();
+            var allocation = await RelayService.Instance.CreateAllocationAsync(maxConnections: 3);
+            NetworkManager.Singleton.GetComponent<UnityTransport>()
+                .SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, "dtls"));
+            _joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+            NetworkManager.Singleton.StartHost();
+            // Update() detects nm.IsHost and transitions to InGame
+        }
+        catch (System.Exception e)
+        {
+            _relayError = $"Relay error: {e.Message}";
+            Debug.LogException(e);
+            _relayBusy = false;
+        }
+    }
+
+    private async Task StartClientWithRelayAsync(string joinCode)
+    {
+        if (string.IsNullOrWhiteSpace(joinCode)) { _relayError = "Enter a join code."; return; }
+        _relayBusy  = true;
+        _relayError = "";
+        try
+        {
+            await InitializeUgsAsync();
+            var allocation = await RelayService.Instance.JoinAllocationAsync(joinCode: joinCode);
+            NetworkManager.Singleton.GetComponent<UnityTransport>()
+                .SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, "dtls"));
+            NetworkManager.Singleton.StartClient();
+        }
+        catch (System.Exception e)
+        {
+            _relayError = $"Join error: {e.Message}";
+            Debug.LogException(e);
+            _relayBusy = false;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -533,6 +661,20 @@ public class GameBootstrap : MonoBehaviour
             onActive  = { textColor = Color.black },
             onHover   = { textColor = Color.black },
             onFocused = { textColor = Color.black }
+        };
+
+        _smallToggleStyle = new GUIStyle(GUI.skin.toggle)
+        {
+            fontSize  = 15,
+            alignment = TextAnchor.MiddleLeft,
+            normal    = { textColor = Color.white },
+            active    = { textColor = Color.white },
+            hover     = { textColor = Color.white },
+            focused   = { textColor = Color.white },
+            onNormal  = { textColor = Color.white },
+            onActive  = { textColor = Color.white },
+            onHover   = { textColor = Color.white },
+            onFocused = { textColor = Color.white }
         };
 
         var sectionColor = new Color(0.25f, 0.25f, 0.25f);
