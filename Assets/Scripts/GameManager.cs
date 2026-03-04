@@ -65,6 +65,8 @@ public class GameManager : MonoBehaviour
     private GUIStyle _toggleStyle;
     private GUIStyle _smallToggleStyle;
     private GUIStyle _joinCodeStyle;
+    private GUIStyle _smallButtonStyle;
+    private GUIStyle _announcementStyle;
     private GUIStyle _segActiveStyle;
     private GUIStyle _segInactiveStyle;
     private GUIStyle _panelLabelStyle;
@@ -220,6 +222,7 @@ public class GameManager : MonoBehaviour
 
         if (GUI.Button(new Rect(btnX, btn1Y + 2f * (btnH + btnGap), btnW, btnH), "Quit", _buttonStyle))
             Application.Quit();
+
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -233,7 +236,7 @@ public class GameManager : MonoBehaviour
         float logW = Screen.width / 2f;
         float logH = Screen.height / 2f;
         float panelW = 220f;
-        float panelH = _useRelay ? 320f : 260f;
+        float panelH = _useRelay ? 370f : 260f;
         float panelX = (logW - panelW) * 0.5f;
         float panelY = (logH - panelH) * 0.5f;
 
@@ -274,7 +277,7 @@ public class GameManager : MonoBehaviour
             }
             else
             {
-                if (GUILayout.Button("Host Game", _buttonStyle))
+                if (GUILayout.Button("Start Host", _buttonStyle))
                     _ = StartHostWithRelayAsync();
 
                 if (GUILayout.Button("Join Game", _buttonStyle))
@@ -302,6 +305,16 @@ public class GameManager : MonoBehaviour
             _state = UIState.MainMenu;
 
         GUILayout.EndArea();
+
+        // Small "Start Server" button — bottom-right corner (relay only)
+        if (_useRelay && !_relayBusy)
+        {
+            float sbW = 160f, sbH = 36f, sbPad = 16f;
+            if (GUI.Button(new Rect(logW - sbW - sbPad, logH - sbH - sbPad, sbW, sbH),
+                           "Start Server", _smallButtonStyle))
+                _ = StartServerWithRelayAsync();
+        }
+
         GUI.matrix = Matrix4x4.identity;
     }
 
@@ -311,27 +324,40 @@ public class GameManager : MonoBehaviour
 
     private void DrawInGameHUD()
     {
+        // Dedicated server overlay (persistent, no local player)
+        var nmHud = NetworkManager.Singleton;
+        if (nmHud != null && nmHud.IsServer && !nmHud.IsClient)
+        {
+            float w = 700f, h = 88f;
+            float cx = (Screen.width - w) * 0.5f;
+            string serverLabel = string.IsNullOrEmpty(_joinCode)
+                ? "Server Running"
+                : $"Server Running  •  Join code: {_joinCode}";
+            GUI.Box(new Rect(cx, 10f, w, h), serverLabel, _announcementStyle);
+            return; // server has no local player — skip rest of HUD
+        }
+
         // Lobby created announcement (top-centre, 8 s)
         if (_lobbyMessageEnd > Time.time)
         {
-            float w = 500f, h = 44f;
-            GUI.Box(new Rect((Screen.width - w) * 0.5f, 10f, w, h), _lobbyMessage);
+            float w = 700f, h = 88f;
+            GUI.Box(new Rect((Screen.width - w) * 0.5f, 10f, w, h), _lobbyMessage, _announcementStyle);
         }
 
         // Kill announcement (top-centre, 4 s)
         if (_killMessageEnd > Time.time)
         {
-            float w = 420f, h = 44f;
-            GUI.Box(new Rect((Screen.width - w) * 0.5f, 60f, w, h), _killMessage);
+            float w = 700f, h = 88f;
+            GUI.Box(new Rect((Screen.width - w) * 0.5f, 106f, w, h), _killMessage, _announcementStyle);
         }
 
         // Death countdown (centre screen)
         if (_deathTimerEnd > Time.time)
         {
             int secs = Mathf.CeilToInt(_deathTimerEnd - Time.time);
-            float w = 300f, h = 52f;
+            float w = 500f, h = 88f;
             GUI.Box(new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h),
-                    $"Respawning in {secs}...");
+                    $"Respawning in {secs}...", _announcementStyle);
         }
 
         // Optional HUD: top-right corner
@@ -470,7 +496,7 @@ public class GameManager : MonoBehaviour
 
         // ── Relay join code (host only) ───────────────────────────────────
         if (_useRelay && !string.IsNullOrEmpty(_joinCode) &&
-            NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
+            NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
         {
             GUILayout.Label("Relay Join Code", _panelLabelStyle);
             GUILayout.Space(4f);
@@ -535,6 +561,31 @@ public class GameManager : MonoBehaviour
             _lobbyMessageEnd = Time.unscaledTime + 8f;
             NetworkManager.Singleton.StartHost();
             // Update() detects nm.IsHost and transitions to InGame
+        }
+        catch (System.Exception e)
+        {
+            _relayError = $"Relay error: {e.Message}";
+            Debug.LogException(e);
+            _relayBusy = false;
+        }
+    }
+
+    private async Task StartServerWithRelayAsync()
+    {
+        _relayBusy  = true;
+        _relayError = "";
+        _joinCode   = "";
+        try
+        {
+            await InitializeUgsAsync();
+            var allocation = await RelayService.Instance.CreateAllocationAsync(maxConnections: 3);
+            NetworkManager.Singleton.GetComponent<UnityTransport>()
+                .SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, "dtls"));
+            _joinCode        = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+            _lobbyMessage    = $"Server started  •  Join code: {_joinCode}";
+            _lobbyMessageEnd = Time.unscaledTime + 8f;
+            NetworkManager.Singleton.StartServer();
+            // Update() detects nm.IsServer and transitions to InGame
         }
         catch (System.Exception e)
         {
@@ -702,6 +753,20 @@ public class GameManager : MonoBehaviour
             normal    = { textColor = Color.black },
             hover     = { textColor = Color.black },
             active    = { textColor = Color.black }
+        };
+
+        _smallButtonStyle = new GUIStyle(GUI.skin.button)
+        {
+            fontSize  = 14,
+            fontStyle = FontStyle.Normal
+        };
+
+        _announcementStyle = new GUIStyle(GUI.skin.box)
+        {
+            fontSize  = 28,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter,
+            normal    = { textColor = Color.white }
         };
 
         var sectionColor = new Color(0.25f, 0.25f, 0.25f);

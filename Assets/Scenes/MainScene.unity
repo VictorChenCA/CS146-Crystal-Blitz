@@ -275,6 +275,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 70145487ced7444b28965bfbd84e9242, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameBootstrap
+  _useRelay: 1
 --- !u!4 &436397541
 Transform:
   m_ObjectHideFlags: 0
