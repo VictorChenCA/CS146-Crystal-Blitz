@@ -10,41 +10,42 @@ using Unity.Services.Relay;
 using Unity.Services.Relay.Models;
 using UnityEngine.InputSystem;
 
-public class GameBootstrap : MonoBehaviour
+public class GameManager : MonoBehaviour
 {
     // ── State ────────────────────────────────────────────────────────────────
     private enum UIState { MainMenu, ConnectionScreen, InGame, Settings }
-    private UIState _state                = UIState.MainMenu;
+    private UIState _state = UIState.MainMenu;
     private UIState _settingsPreviousState = UIState.MainMenu;
 
     // ── Networking ───────────────────────────────────────────────────────────
     private string _hostIp = "127.0.0.1";
-    private ushort _port   = 7777;
-    private bool   _useRelay   = false;
-    private string _joinCode   = "";
+    private ushort _port = 7777;
+    [SerializeField] private bool _useRelay = false;
+    private string _joinCode = "";
     private string _relayError = "";
-    private bool   _relayBusy  = false;
+    private bool  _relayBusy   = false;
+    private float _copiedUntil = -1f;
 
     // ── Kill / Death HUD ─────────────────────────────────────────────────────
-    private float  _deathTimerEnd  = -1f;
-    private string _killMessage    = "";
-    private float  _killMessageEnd = -1f;
+    private float _deathTimerEnd = -1f;
+    private string _killMessage = "";
+    private float _killMessageEnd = -1f;
 
     // ── FPS counter ──────────────────────────────────────────────────────────
-    private float _fpsAccum      = 0f;
-    private int   _fpsFrames     = 0;
+    private float _fpsAccum = 0f;
+    private int _fpsFrames = 0;
     private float _fpsNextUpdate = 0f;
-    private float _fpsDisplay    = 0f;
+    private float _fpsDisplay = 0f;
 
     // ── Settings toggles ─────────────────────────────────────────────────────
-    private bool _showFps              = false;
+    private bool _showFps = false;
     private bool _showConnectionStatus = false;
-    private bool _showLatency          = false;
-    private bool _useWasd              = true;
+    private bool _showLatency = false;
+    private bool _useWasd = true;
 
     // ── Graphics / performance settings ──────────────────────────────────────
-    private int   _qualityIndex = 1;       // 0=Low 1=Med 2=High
-    private float _targetFps    = 60f;     // 241 = uncapped
+    private int _qualityIndex = 1;       // 0=Low 1=Med 2=High
+    private float _targetFps = 60f;     // 241 = uncapped
 
     // ── Textures (created in Awake, destroyed in OnDestroy) ──────────────────
     private Texture2D _dimOverlayTex;
@@ -61,11 +62,12 @@ public class GameBootstrap : MonoBehaviour
     private GUIStyle _hudLabelStyle;
     private GUIStyle _toggleStyle;
     private GUIStyle _smallToggleStyle;
+    private GUIStyle _joinCodeStyle;
     private GUIStyle _segActiveStyle;
     private GUIStyle _segInactiveStyle;
     private GUIStyle _panelLabelStyle;
     private GUIStyle _textFieldStyle;
-    private bool     _stylesInitialized;
+    private bool _stylesInitialized;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Lifecycle
@@ -73,9 +75,9 @@ public class GameBootstrap : MonoBehaviour
 
     private void Awake()
     {
-        _dimOverlayTex  = MakeTex(new Color(0f,    0f,    0f,   0.6f));
-        _whitePanelTex  = MakeTex(new Color(1f,    1f,    1f,   0.95f));
-        _segActiveTex   = MakeTex(new Color(0.18f, 0.38f, 0.72f, 1f));
+        _dimOverlayTex = MakeTex(new Color(0f, 0f, 0f, 0.6f));
+        _whitePanelTex = MakeTex(new Color(1f, 1f, 1f, 0.95f));
+        _segActiveTex = MakeTex(new Color(0.18f, 0.38f, 0.72f, 1f));
         _segInactiveTex = MakeTex(new Color(0.82f, 0.82f, 0.82f, 1f));
 
         ApplyRenderScale(_qualityIndex);
@@ -109,7 +111,7 @@ public class GameBootstrap : MonoBehaviour
     private void HandleLocalPlayerDeath(float duration) => _deathTimerEnd = Time.time + duration;
     private void HandleKillAnnouncement(string message)
     {
-        _killMessage    = message;
+        _killMessage = message;
         _killMessageEnd = Time.time + 4f;
     }
 
@@ -120,13 +122,13 @@ public class GameBootstrap : MonoBehaviour
     private void Update()
     {
         // FPS accumulation
-        _fpsAccum  += Time.unscaledDeltaTime;
+        _fpsAccum += Time.unscaledDeltaTime;
         _fpsFrames += 1;
         if (Time.unscaledTime >= _fpsNextUpdate)
         {
-            _fpsDisplay    = _fpsFrames / _fpsAccum;
-            _fpsAccum      = 0f;
-            _fpsFrames     = 0;
+            _fpsDisplay = _fpsFrames / _fpsAccum;
+            _fpsAccum = 0f;
+            _fpsFrames = 0;
             _fpsNextUpdate = Time.unscaledTime + 1f;
         }
 
@@ -172,10 +174,10 @@ public class GameBootstrap : MonoBehaviour
         EnsureStyles();
         switch (_state)
         {
-            case UIState.MainMenu:         DrawMainMenu();                         break;
-            case UIState.ConnectionScreen: DrawConnectionScreen();                 break;
-            case UIState.InGame:           DrawInGameHUD();                        break;
-            case UIState.Settings:         DrawInGameHUD(); DrawSettingsPanel();   break;
+            case UIState.MainMenu: DrawMainMenu(); break;
+            case UIState.ConnectionScreen: DrawConnectionScreen(); break;
+            case UIState.InGame: DrawInGameHUD(); break;
+            case UIState.Settings: DrawInGameHUD(); DrawSettingsPanel(); break;
         }
     }
 
@@ -226,17 +228,14 @@ public class GameBootstrap : MonoBehaviour
     {
         GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(2f, 2f, 1f));
 
-        float logW   = Screen.width  / 2f;
-        float logH   = Screen.height / 2f;
+        float logW = Screen.width / 2f;
+        float logH = Screen.height / 2f;
         float panelW = 220f;
         float panelH = _useRelay ? 320f : 260f;
         float panelX = (logW - panelW) * 0.5f;
         float panelY = (logH - panelH) * 0.5f;
 
         GUILayout.BeginArea(new Rect(panelX, panelY, panelW, panelH));
-
-        _useRelay = GUILayout.Toggle(_useRelay, "Use Relay (Online)", _smallToggleStyle);
-        GUILayout.Space(6f);
 
         if (!_useRelay)
         {
@@ -273,10 +272,10 @@ public class GameBootstrap : MonoBehaviour
             }
             else
             {
-                if (GUILayout.Button("Host (Relay)", _buttonStyle))
+                if (GUILayout.Button("Host Game", _buttonStyle))
                     _ = StartHostWithRelayAsync();
 
-                if (GUILayout.Button("Join (Relay)", _buttonStyle))
+                if (GUILayout.Button("Join Game", _buttonStyle))
                     _ = StartClientWithRelayAsync(_joinCode);
 
                 if (!string.IsNullOrEmpty(_joinCode) && NetworkManager.Singleton != null
@@ -366,12 +365,12 @@ public class GameBootstrap : MonoBehaviour
         // Panel
         float panelW = sw * 0.5f;
         float panelH = sh * 0.72f;
-        Rect  panelR = new Rect((sw - panelW) * 0.5f, (sh - panelH) * 0.5f, panelW, panelH);
+        Rect panelR = new Rect((sw - panelW) * 0.5f, (sh - panelH) * 0.5f, panelW, panelH);
         GUI.DrawTexture(panelR, _whitePanelTex);
 
         // Inner area with padding
-        float pad    = 24f;
-        Rect  innerR = new Rect(panelR.x + pad, panelR.y + pad,
+        float pad = 24f;
+        Rect innerR = new Rect(panelR.x + pad, panelR.y + pad,
                                 panelR.width - pad * 2f, panelR.height - pad * 2f);
         GUILayout.BeginArea(innerR);
 
@@ -464,11 +463,16 @@ public class GameBootstrap : MonoBehaviour
         if (_useRelay && !string.IsNullOrEmpty(_joinCode) &&
             NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
         {
-            GUILayout.Label("Relay Join Code", _panelLabelStyle);
+            bool copied = Time.unscaledTime < _copiedUntil;
+            GUILayout.Label(copied ? "Copied!" : "Relay Join Code", _panelLabelStyle);
             GUILayout.Space(4f);
             GUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
-            GUILayout.Label(_joinCode, _panelTitleStyle);
+            if (GUILayout.Button(_joinCode, _joinCodeStyle))
+            {
+                GUIUtility.systemCopyBuffer = _joinCode;
+                _copiedUntil = Time.unscaledTime + 1.5f;
+            }
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
             GUILayout.Space(12f);
@@ -480,8 +484,8 @@ public class GameBootstrap : MonoBehaviour
             if (GUILayout.Button("Disconnect & Return to Main Menu", _buttonStyle))
             {
                 nm.Shutdown();
-                _relayBusy  = false;
-                _joinCode   = "";
+                _relayBusy = false;
+                _joinCode = "";
                 _relayError = "";
                 _state = UIState.MainMenu;
             }
@@ -508,9 +512,9 @@ public class GameBootstrap : MonoBehaviour
 
     private async Task StartHostWithRelayAsync()
     {
-        _relayBusy  = true;
+        _relayBusy = true;
         _relayError = "";
-        _joinCode   = "";
+        _joinCode = "";
         try
         {
             await InitializeUgsAsync();
@@ -532,7 +536,7 @@ public class GameBootstrap : MonoBehaviour
     private async Task StartClientWithRelayAsync(string joinCode)
     {
         if (string.IsNullOrWhiteSpace(joinCode)) { _relayError = "Enter a join code."; return; }
-        _relayBusy  = true;
+        _relayBusy = true;
         _relayError = "";
         try
         {
@@ -573,7 +577,7 @@ public class GameBootstrap : MonoBehaviour
     {
         var nm = NetworkManager.Singleton;
         if (nm == null) return "Disconnected";
-        if (nm.IsHost)   return "Host";
+        if (nm.IsHost) return "Host";
         if (nm.IsServer) return "Server";
         if (nm.IsClient) return $"Client ({_hostIp})";
         return "Connecting...";
@@ -609,31 +613,31 @@ public class GameBootstrap : MonoBehaviour
 
         _titleStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 80,
+            fontSize = 80,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
-            normal    = { textColor = Color.white }
+            normal = { textColor = Color.white }
         };
 
         _subtitleStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 28,
+            fontSize = 28,
             fontStyle = FontStyle.Italic,
             alignment = TextAnchor.MiddleCenter,
-            normal    = { textColor = new Color(0.8f, 0.8f, 0.8f) }
+            normal = { textColor = new Color(0.8f, 0.8f, 0.8f) }
         };
 
         _panelTitleStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 40,
+            fontSize = 40,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
-            normal    = { textColor = Color.black }
+            normal = { textColor = Color.black }
         };
 
         _buttonStyle = new GUIStyle(GUI.skin.button)
         {
-            fontSize  = 22,
+            fontSize = 22,
             fontStyle = FontStyle.Bold
         };
 
@@ -644,71 +648,71 @@ public class GameBootstrap : MonoBehaviour
 
         _hudLabelStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 18,
+            fontSize = 18,
             alignment = TextAnchor.MiddleRight,
-            normal    = { textColor = Color.white }
+            normal = { textColor = Color.white }
         };
 
         _toggleStyle = new GUIStyle(GUI.skin.toggle)
         {
-            fontSize  = 25,
+            fontSize = 25,
             alignment = TextAnchor.MiddleCenter,
-            normal    = { textColor = Color.black },
-            active    = { textColor = Color.black },
-            hover     = { textColor = Color.black },
-            focused   = { textColor = Color.black },
-            onNormal  = { textColor = Color.black },
-            onActive  = { textColor = Color.black },
-            onHover   = { textColor = Color.black },
+            normal = { textColor = Color.black },
+            active = { textColor = Color.black },
+            hover = { textColor = Color.black },
+            focused = { textColor = Color.black },
+            onNormal = { textColor = Color.black },
+            onActive = { textColor = Color.black },
+            onHover = { textColor = Color.black },
             onFocused = { textColor = Color.black }
         };
 
         _smallToggleStyle = new GUIStyle(GUI.skin.toggle)
         {
-            fontSize  = 15,
+            fontSize = 15,
             alignment = TextAnchor.MiddleLeft,
-            normal    = { textColor = Color.white },
-            active    = { textColor = Color.white },
-            hover     = { textColor = Color.white },
-            focused   = { textColor = Color.white },
-            onNormal  = { textColor = Color.white },
-            onActive  = { textColor = Color.white },
-            onHover   = { textColor = Color.white },
+            normal = { textColor = Color.white },
+            active = { textColor = Color.white },
+            hover = { textColor = Color.white },
+            focused = { textColor = Color.white },
+            onNormal = { textColor = Color.white },
+            onActive = { textColor = Color.white },
+            onHover = { textColor = Color.white },
             onFocused = { textColor = Color.white }
         };
 
         var sectionColor = new Color(0.25f, 0.25f, 0.25f);
         _panelLabelStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 21,
+            fontSize = 21,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
-            normal    = { textColor = sectionColor },
-            hover     = { textColor = sectionColor },
-            active    = { textColor = sectionColor }
+            normal = { textColor = sectionColor },
+            hover = { textColor = sectionColor },
+            active = { textColor = sectionColor }
         };
 
         _segActiveStyle = new GUIStyle(GUI.skin.button)
         {
-            fontSize  = 25,
+            fontSize = 25,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
-            border    = new RectOffset(0, 0, 0, 0),
-            normal    = { background = _segActiveTex,   textColor = Color.white },
-            hover     = { background = _segActiveTex,   textColor = Color.white },
-            active    = { background = _segActiveTex,   textColor = Color.white },
-            onNormal  = { background = _segActiveTex,   textColor = Color.white }
+            border = new RectOffset(0, 0, 0, 0),
+            normal = { background = _segActiveTex, textColor = Color.white },
+            hover = { background = _segActiveTex, textColor = Color.white },
+            active = { background = _segActiveTex, textColor = Color.white },
+            onNormal = { background = _segActiveTex, textColor = Color.white }
         };
 
         _segInactiveStyle = new GUIStyle(GUI.skin.button)
         {
-            fontSize  = 25,
+            fontSize = 25,
             fontStyle = FontStyle.Normal,
             alignment = TextAnchor.MiddleCenter,
-            border    = new RectOffset(0, 0, 0, 0),
-            normal    = { background = _segInactiveTex, textColor = new Color(0.2f, 0.2f, 0.2f) },
-            hover     = { background = _segInactiveTex, textColor = Color.black },
-            active    = { background = _segInactiveTex, textColor = Color.black }
+            border = new RectOffset(0, 0, 0, 0),
+            normal = { background = _segInactiveTex, textColor = new Color(0.2f, 0.2f, 0.2f) },
+            hover = { background = _segInactiveTex, textColor = Color.black },
+            active = { background = _segInactiveTex, textColor = Color.black }
         };
 
         _textFieldStyle = new GUIStyle(GUI.skin.textField)
