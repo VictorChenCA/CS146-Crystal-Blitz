@@ -27,9 +27,11 @@ public class GameManager : MonoBehaviour
     private float _copiedUntil = -1f;
 
     // ── Kill / Death HUD ─────────────────────────────────────────────────────
-    private float _deathTimerEnd = -1f;
-    private string _killMessage = "";
-    private float _killMessageEnd = -1f;
+    private float  _deathTimerEnd    = -1f;
+    private string _killMessage      = "";
+    private float  _killMessageEnd   = -1f;
+    private string _lobbyMessage     = "";
+    private float  _lobbyMessageEnd  = -1f;
 
     // ── FPS counter ──────────────────────────────────────────────────────────
     private float _fpsAccum = 0f;
@@ -309,6 +311,13 @@ public class GameManager : MonoBehaviour
 
     private void DrawInGameHUD()
     {
+        // Lobby created announcement (top-centre, 8 s)
+        if (_lobbyMessageEnd > Time.time)
+        {
+            float w = 500f, h = 44f;
+            GUI.Box(new Rect((Screen.width - w) * 0.5f, 10f, w, h), _lobbyMessage);
+        }
+
         // Kill announcement (top-centre, 4 s)
         if (_killMessageEnd > Time.time)
         {
@@ -463,12 +472,12 @@ public class GameManager : MonoBehaviour
         if (_useRelay && !string.IsNullOrEmpty(_joinCode) &&
             NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
         {
-            bool copied = Time.unscaledTime < _copiedUntil;
-            GUILayout.Label(copied ? "Copied!" : "Relay Join Code", _panelLabelStyle);
+            GUILayout.Label("Relay Join Code", _panelLabelStyle);
             GUILayout.Space(4f);
+            bool copied = Time.unscaledTime < _copiedUntil;
             GUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button(_joinCode, _joinCodeStyle))
+            if (GUILayout.Button(copied ? "Copied!" : _joinCode, _joinCodeStyle))
             {
                 GUIUtility.systemCopyBuffer = _joinCode;
                 _copiedUntil = Time.unscaledTime + 1.5f;
@@ -521,7 +530,9 @@ public class GameManager : MonoBehaviour
             var allocation = await RelayService.Instance.CreateAllocationAsync(maxConnections: 3);
             NetworkManager.Singleton.GetComponent<UnityTransport>()
                 .SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, "dtls"));
-            _joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+            _joinCode        = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+            _lobbyMessage    = $"Lobby created  •  Join code: {_joinCode}";
+            _lobbyMessageEnd = Time.unscaledTime + 8f;
             NetworkManager.Singleton.StartHost();
             // Update() detects nm.IsHost and transitions to InGame
         }
@@ -629,10 +640,12 @@ public class GameManager : MonoBehaviour
 
         _panelTitleStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 40,
+            fontSize  = 40,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = Color.black }
+            normal    = { textColor = Color.black },
+            hover     = { textColor = Color.black },
+            active    = { textColor = Color.black }
         };
 
         _buttonStyle = new GUIStyle(GUI.skin.button)
@@ -679,6 +692,16 @@ public class GameManager : MonoBehaviour
             onActive = { textColor = Color.white },
             onHover = { textColor = Color.white },
             onFocused = { textColor = Color.white }
+        };
+
+        _joinCodeStyle = new GUIStyle(GUI.skin.button)
+        {
+            fontSize  = 40,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter,
+            normal    = { textColor = Color.black },
+            hover     = { textColor = Color.black },
+            active    = { textColor = Color.black }
         };
 
         var sectionColor = new Color(0.25f, 0.25f, 0.25f);
