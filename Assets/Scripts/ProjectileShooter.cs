@@ -15,6 +15,10 @@ public class ProjectileShooter : NetworkBehaviour
     [Header("Cooldown")]
     [SerializeField] private float fireCooldown = 2f;
 
+    [Header("Attack Timing")]
+    [SerializeField] private float castDelay      = 0.4f;
+    [SerializeField] private float animationDelay = 0.4f;
+
     [Header("Launch")]
     [SerializeField] private float launchOffset = 0.5f;
 
@@ -96,7 +100,7 @@ public class ProjectileShooter : NetworkBehaviour
     private IEnumerator AttackSequence(Vector3 targetPos)
     {
         var pc = GetComponent<PlayerController>();
-        pc?.LockMovement(0.5f);
+        pc?.LockMovement(castDelay + animationDelay);
 
         // Compute offset start position toward target
         Vector3 castDir   = targetPos - firePoint.position;
@@ -111,9 +115,9 @@ public class ProjectileShooter : NetworkBehaviour
 
         GameObject preview = CreatePreviewSphere();
         preview.transform.position = startPos;
+        var previewRenderer = preview.GetComponent<Renderer>();
 
-        const float castDuration = 0.25f;
-        float castEnd = Time.time + castDuration;
+        float castEnd = Time.time + castDelay;
         while (Time.time < castEnd)
         {
             if (HasMovementInput())
@@ -123,8 +127,9 @@ public class ProjectileShooter : NetworkBehaviour
                 _attackCoroutine = null;
                 yield break;
             }
-            float t = 1f - (castEnd - Time.time) / castDuration;
+            float t = 1f - (castEnd - Time.time) / castDelay;
             preview.transform.localScale = Vector3.Lerp(Vector3.zero, fullScale, t);
+            previewRenderer.material.color = Color.Lerp(Color.white, Color.yellow, Mathf.Pow(t, 3f));
             yield return null;
         }
 
@@ -134,8 +139,8 @@ public class ProjectileShooter : NetworkBehaviour
         FireProjectileServerRpc(startPos, targetPos, damage);
         _nextFireTime = Time.time + fireCooldown;
 
-        // Phase 2: Animation delay (0.25 s) — projectile in flight, can cancel lock early
-        float animEnd = Time.time + 0.25f;
+        // Phase 2: Animation delay — projectile in flight, can cancel lock early
+        float animEnd = Time.time + animationDelay;
         while (Time.time < animEnd)
         {
             if (HasMovementInput())
