@@ -573,9 +573,16 @@ public class GameManager : MonoBehaviour
         var   circleC   = new Vector2(hudLeft + circleR, circleTop + circleR);
         float abX       = hudLeft + circleD + circleColGap;
 
-        // ── Profile circle ────────────────────────────────────────────────
+        // ── Player name above circle ──────────────────────────────────────
+        string playerName = $"Player {(nm.LocalClientId + 1)}";
+        float  nameW = 100f, nameH = 20f;
+        GUI.Label(new Rect(circleC.x - nameW * 0.5f, circleTop - nameH - 2f, nameW, nameH),
+                  playerName, _levelStyle);
+
+        // ── Profile picture (plain rect, player color) ────────────────────
         Color profileCol = pc != null ? pc.PlayerColor.Value : Color.gray;
-        DrawFilledCircle(circleC, circleR - xpThickness - 2f, profileCol);
+        float innerR = circleR - xpThickness - 2f;
+        DrawRect(circleC.x - innerR, circleC.y - innerR, innerR * 2f, innerR * 2f, profileCol);
 
         float xpRingR = circleR - xpThickness * 0.5f;
         // Background ring (full 270°, dark)
@@ -592,7 +599,7 @@ public class GameManager : MonoBehaviour
         DrawRect(abX, colTop, abilitySize, abilitySize, new Color(0.12f, 0.12f, 0.12f, 0.92f));
         float cd = shooter != null ? shooter.CooldownFraction : 0f;
         if (cd > 0.01f)
-            DrawRect(abX, colTop, abilitySize, cd * abilitySize, new Color(0f, 0f, 0f, 0.5f));
+            DrawRect(abX, colTop + abilitySize * (1f - cd), abilitySize, cd * abilitySize, new Color(0f, 0f, 0f, 0.5f));
 
         // ── Ability 2 — placeholder ───────────────────────────────────────
         DrawRect(abX + abilitySize + abilityGap, colTop, abilitySize, abilitySize,
@@ -608,7 +615,7 @@ public class GameManager : MonoBehaviour
         // ── Mana bar — placeholder ────────────────────────────────────────
         float manaY = barY + barH + barGap;
         DrawRect(abX, manaY, colW, barH, new Color(0.08f, 0.08f, 0.08f, 0.9f));
-        DrawRect(abX, manaY, colW * 0.6f, barH, new Color(0.12f, 0.32f, 0.82f, 1f));
+        DrawRect(abX, manaY, colW, barH, new Color(0.12f, 0.32f, 0.82f, 1f));
     }
 
     // ── Draw helpers ──────────────────────────────────────────────────────────
@@ -617,18 +624,6 @@ public class GameManager : MonoBehaviour
     {
         GUI.color = color;
         GUI.DrawTexture(new Rect(x, y, w, h), _whitePanelTex);
-        GUI.color = Color.white;
-    }
-
-    private void DrawFilledCircle(Vector2 center, float radius, Color color)
-    {
-        GUI.color = color;
-        float r2  = radius * radius;
-        for (float dy = -radius; dy <= radius; dy += 1f)
-        {
-            float dx = Mathf.Sqrt(Mathf.Max(0f, r2 - dy * dy));
-            GUI.DrawTexture(new Rect(center.x - dx, center.y + dy, dx * 2f, 1f), _whitePanelTex);
-        }
         GUI.color = Color.white;
     }
 
