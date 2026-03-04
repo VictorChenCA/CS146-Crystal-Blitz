@@ -57,7 +57,7 @@ public class PlayerHealth : NetworkBehaviour
         DestroyBar();
     }
 
-    private void OnDestroy()
+    public override void OnDestroy()
     {
         DestroyBar();
     }
