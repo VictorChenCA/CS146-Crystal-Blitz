@@ -22,6 +22,8 @@ public class ProjectileShooter : NetworkBehaviour
     [Header("Launch")]
     [SerializeField] private float launchOffset = 0.5f;
 
+    public float CooldownFraction => Mathf.Clamp01((_nextFireTime - Time.time) / fireCooldown);
+
     private readonly Plane _groundPlane = new Plane(Vector3.up, Vector3.zero);
     private Camera _mainCamera;
     private float _nextFireTime;

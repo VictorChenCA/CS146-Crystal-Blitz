@@ -67,6 +67,7 @@ public class GameManager : MonoBehaviour
     private GUIStyle _joinCodeStyle;
     private GUIStyle _smallButtonStyle;
     private GUIStyle _announcementStyle;
+    private GUIStyle _levelStyle;
     private GUIStyle _segActiveStyle;
     private GUIStyle _segInactiveStyle;
     private GUIStyle _panelLabelStyle;
@@ -360,6 +361,8 @@ public class GameManager : MonoBehaviour
                     $"Respawning in {secs}...", _announcementStyle);
         }
 
+        DrawPlayerHUD();
+
         // Optional HUD: top-right corner
         if (!_showFps && !_showConnectionStatus && !_showLatency) return;
 
@@ -531,6 +534,121 @@ public class GameManager : MonoBehaviour
             _state = _settingsPreviousState;
 
         GUILayout.EndArea();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Player HUD
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void DrawPlayerHUD()
+    {
+        var nm       = NetworkManager.Singleton;
+        var localObj = nm?.LocalClient?.PlayerObject;
+        if (localObj == null) return;
+
+        var health  = localObj.GetComponent<PlayerHealth>();
+        var shooter = localObj.GetComponent<ProjectileShooter>();
+        var pc      = localObj.GetComponent<PlayerController>();
+
+        // ── Layout constants ──────────────────────────────────────────────
+        const float padBottom    = 20f;
+        const float circleD      = 90f;
+        const float xpThickness  = 7f;
+        const float abilitySize  = 68f;
+        const float abilityGap   = 6f;
+        const float barH         = 14f;
+        const float barGap       = 5f;
+        const float circleColGap = 8f;
+
+        float colH   = abilitySize + barGap + barH + barGap + barH;  // 106
+        float colW   = abilitySize * 2f + abilityGap;                 // 142
+        float totalW = circleD + circleColGap + colW;                  // 240
+
+        float sw        = Screen.width;
+        float sh        = Screen.height;
+        float hudLeft   = (sw - totalW) * 0.5f;
+        float colTop    = sh - padBottom - colH;
+        float circleTop = colTop + (colH - circleD) * 0.5f;
+        float circleR   = circleD * 0.5f;
+        var   circleC   = new Vector2(hudLeft + circleR, circleTop + circleR);
+        float abX       = hudLeft + circleD + circleColGap;
+
+        // ── Profile circle ────────────────────────────────────────────────
+        Color profileCol = pc != null ? pc.PlayerColor.Value : Color.gray;
+        DrawFilledCircle(circleC, circleR - xpThickness - 2f, profileCol);
+
+        float xpRingR = circleR - xpThickness * 0.5f;
+        // Background ring (full 270°, dark)
+        DrawArc(circleC, xpRingR, xpThickness, 135f, 270f, 1f, new Color(0.15f, 0.15f, 0.15f, 0.9f));
+        // Foreground ring (placeholder 0% XP)
+        DrawArc(circleC, xpRingR, xpThickness, 135f, 270f, 0f, new Color(1f, 0.78f, 0.08f, 1f));
+
+        // Level number below the circle
+        float lvlW = 40f, lvlH = 20f;
+        GUI.Label(new Rect(circleC.x - lvlW * 0.5f, circleTop + circleD - 2f, lvlW, lvlH),
+                  "1", _levelStyle);
+
+        // ── Ability 1 — projectile (with cooldown overlay) ───────────────
+        DrawRect(abX, colTop, abilitySize, abilitySize, new Color(0.12f, 0.12f, 0.12f, 0.92f));
+        float cd = shooter != null ? shooter.CooldownFraction : 0f;
+        if (cd > 0.01f)
+            DrawRect(abX, colTop, abilitySize, cd * abilitySize, new Color(0f, 0f, 0f, 0.5f));
+
+        // ── Ability 2 — placeholder ───────────────────────────────────────
+        DrawRect(abX + abilitySize + abilityGap, colTop, abilitySize, abilitySize,
+                 new Color(0.12f, 0.12f, 0.12f, 0.92f));
+
+        // ── Health bar ────────────────────────────────────────────────────
+        float barY = colTop + abilitySize + barGap;
+        DrawRect(abX, barY, colW, barH, new Color(0.08f, 0.08f, 0.08f, 0.9f));
+        float hp = health != null ? health.HealthFraction : 1f;
+        if (hp > 0f)        DrawRect(abX,            barY, colW * hp,        barH, new Color(0.2f,  0.78f, 0.2f,  1f));
+        if (hp < 1f)        DrawRect(abX + colW * hp, barY, colW * (1f - hp), barH, new Color(0.72f, 0.14f, 0.14f, 1f));
+
+        // ── Mana bar — placeholder ────────────────────────────────────────
+        float manaY = barY + barH + barGap;
+        DrawRect(abX, manaY, colW, barH, new Color(0.08f, 0.08f, 0.08f, 0.9f));
+        DrawRect(abX, manaY, colW * 0.6f, barH, new Color(0.12f, 0.32f, 0.82f, 1f));
+    }
+
+    // ── Draw helpers ──────────────────────────────────────────────────────────
+
+    private void DrawRect(float x, float y, float w, float h, Color color)
+    {
+        GUI.color = color;
+        GUI.DrawTexture(new Rect(x, y, w, h), _whitePanelTex);
+        GUI.color = Color.white;
+    }
+
+    private void DrawFilledCircle(Vector2 center, float radius, Color color)
+    {
+        GUI.color = color;
+        float r2  = radius * radius;
+        for (float dy = -radius; dy <= radius; dy += 1f)
+        {
+            float dx = Mathf.Sqrt(Mathf.Max(0f, r2 - dy * dy));
+            GUI.DrawTexture(new Rect(center.x - dx, center.y + dy, dx * 2f, 1f), _whitePanelTex);
+        }
+        GUI.color = Color.white;
+    }
+
+    private void DrawArc(Vector2 center, float radius, float thickness,
+                         float startDeg, float spanDeg, float progress, Color color)
+    {
+        GUI.color  = color;
+        int total  = Mathf.Max(1, Mathf.RoundToInt(spanDeg / 360f * 96f));
+        int filled = Mathf.RoundToInt(total * Mathf.Clamp01(progress));
+        float halfT = thickness * 0.5f;
+        for (int i = 0; i < filled; i++)
+        {
+            float angle = (startDeg + (float)i / total * spanDeg) * Mathf.Deg2Rad;
+            GUI.DrawTexture(
+                new Rect(center.x + radius * Mathf.Cos(angle) - halfT,
+                         center.y + radius * Mathf.Sin(angle) - halfT,
+                         thickness, thickness),
+                _whitePanelTex);
+        }
+        GUI.color = Color.white;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -766,6 +884,14 @@ public class GameManager : MonoBehaviour
             fontSize  = 28,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
+            normal    = { textColor = Color.white }
+        };
+
+        _levelStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize  = 16,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.UpperCenter,
             normal    = { textColor = Color.white }
         };
 

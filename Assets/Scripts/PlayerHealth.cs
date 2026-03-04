@@ -21,6 +21,8 @@ public class PlayerHealth : NetworkBehaviour
     // Fired on ALL clients to show the kill feed.
     public static event System.Action<string> OnKillAnnouncement;
 
+    public float HealthFraction => Mathf.Clamp01(Health.Value / maxHealth);
+
     public NetworkVariable<float> Health = new NetworkVariable<float>(
         100f,
         NetworkVariableReadPermission.Everyone,
