@@ -326,7 +326,7 @@ public class GameBootstrap : MonoBehaviour
         // ── Controller type ───────────────────────────────────────────────
         GUILayout.Label("Controller", _panelLabelStyle);
         GUILayout.Space(4f);
-        float segW = 320f, segH = 44f;
+        float segW = 460f, segH = 44f;
         GUILayout.BeginHorizontal();
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("WASD", _useWasd ? _segActiveStyle : _segInactiveStyle,
@@ -505,18 +505,18 @@ public class GameBootstrap : MonoBehaviour
 
         _buttonStyle = new GUIStyle(GUI.skin.button)
         {
-            fontSize  = 28,
+            fontSize  = 22,
             fontStyle = FontStyle.Bold
         };
 
         _labelStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 23
+            fontSize = 18
         };
 
         _hudLabelStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 23,
+            fontSize  = 18,
             alignment = TextAnchor.MiddleRight,
             normal    = { textColor = Color.white }
         };
@@ -552,7 +552,6 @@ public class GameBootstrap : MonoBehaviour
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
             border    = new RectOffset(0, 0, 0, 0),
-            padding   = new RectOffset(10, 10, 4, 4),
             normal    = { background = _segActiveTex,   textColor = Color.white },
             hover     = { background = _segActiveTex,   textColor = Color.white },
             active    = { background = _segActiveTex,   textColor = Color.white },
@@ -565,7 +564,6 @@ public class GameBootstrap : MonoBehaviour
             fontStyle = FontStyle.Normal,
             alignment = TextAnchor.MiddleCenter,
             border    = new RectOffset(0, 0, 0, 0),
-            padding   = new RectOffset(10, 10, 4, 4),
             normal    = { background = _segInactiveTex, textColor = new Color(0.2f, 0.2f, 0.2f) },
             hover     = { background = _segInactiveTex, textColor = Color.black },
             active    = { background = _segInactiveTex, textColor = Color.black }
@@ -573,7 +571,7 @@ public class GameBootstrap : MonoBehaviour
 
         _textFieldStyle = new GUIStyle(GUI.skin.textField)
         {
-            fontSize = 23
+            fontSize = 18
         };
     }
 }
