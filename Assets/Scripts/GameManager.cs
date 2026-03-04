@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine.InputSystem;
@@ -31,6 +33,10 @@ public class GameBootstrap : MonoBehaviour
     private bool _showLatency          = false;
     private bool _useWasd              = true;
 
+    // ── Graphics / performance settings ──────────────────────────────────────
+    private int   _qualityIndex = 1;       // 0=Low 1=Med 2=High
+    private float _targetFps    = 60f;     // 241 = uncapped
+
     // ── Textures (created in Awake, destroyed in OnDestroy) ──────────────────
     private Texture2D _dimOverlayTex;
     private Texture2D _whitePanelTex;
@@ -47,6 +53,7 @@ public class GameBootstrap : MonoBehaviour
     private GUIStyle _toggleStyle;
     private GUIStyle _segActiveStyle;
     private GUIStyle _segInactiveStyle;
+    private GUIStyle _panelLabelStyle;
     private GUIStyle _textFieldStyle;
     private bool     _stylesInitialized;
 
@@ -56,10 +63,13 @@ public class GameBootstrap : MonoBehaviour
 
     private void Awake()
     {
-        _dimOverlayTex  = MakeTex(new Color(0f,   0f,   0f,   0.6f));
-        _whitePanelTex  = MakeTex(new Color(1f,   1f,   1f,   0.95f));
-        _segActiveTex   = MakeTex(new Color(0.18f, 0.38f, 0.72f, 1f));  // blue
-        _segInactiveTex = MakeTex(new Color(0.82f, 0.82f, 0.82f, 1f));  // light grey
+        _dimOverlayTex  = MakeTex(new Color(0f,    0f,    0f,   0.6f));
+        _whitePanelTex  = MakeTex(new Color(1f,    1f,    1f,   0.95f));
+        _segActiveTex   = MakeTex(new Color(0.18f, 0.38f, 0.72f, 1f));
+        _segInactiveTex = MakeTex(new Color(0.82f, 0.82f, 0.82f, 1f));
+
+        ApplyRenderScale(_qualityIndex);
+        Application.targetFrameRate = (int)_targetFps;
     }
 
     private void OnDestroy()
@@ -300,7 +310,7 @@ public class GameBootstrap : MonoBehaviour
 
         // Panel
         float panelW = sw * 0.5f;
-        float panelH = sh * 0.5f;
+        float panelH = sh * 0.72f;
         Rect  panelR = new Rect((sw - panelW) * 0.5f, (sh - panelH) * 0.5f, panelW, panelH);
         GUI.DrawTexture(panelR, _whitePanelTex);
 
@@ -311,10 +321,12 @@ public class GameBootstrap : MonoBehaviour
         GUILayout.BeginArea(innerR);
 
         GUILayout.Label("Settings", _panelTitleStyle);
-        GUILayout.Space(12f);
+        GUILayout.Space(10f);
 
-        // Controller type selector
-        float segW = 320f, segH = 48f;
+        // ── Controller type ───────────────────────────────────────────────
+        GUILayout.Label("Controller", _panelLabelStyle);
+        GUILayout.Space(4f);
+        float segW = 320f, segH = 44f;
         GUILayout.BeginHorizontal();
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("WASD", _useWasd ? _segActiveStyle : _segInactiveStyle,
@@ -326,9 +338,53 @@ public class GameBootstrap : MonoBehaviour
         GUILayout.FlexibleSpace();
         GUILayout.EndHorizontal();
 
-        GUILayout.Space(16f);
+        GUILayout.Space(12f);
 
-        // Centered toggles
+        // ── Graphics quality ──────────────────────────────────────────────
+        GUILayout.Label("Graphics Quality", _panelLabelStyle);
+        GUILayout.Space(4f);
+        string[] qualityLabels = { "Low", "Medium", "High" };
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        for (int i = 0; i < 3; i++)
+        {
+            if (GUILayout.Button(qualityLabels[i],
+                                 i == _qualityIndex ? _segActiveStyle : _segInactiveStyle,
+                                 GUILayout.Width(segW / 3f), GUILayout.Height(segH)))
+            {
+                _qualityIndex = i;
+                ApplyRenderScale(_qualityIndex);
+            }
+        }
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(12f);
+
+        // ── FPS cap ───────────────────────────────────────────────────────
+        GUILayout.Label("Frame Rate Cap", _panelLabelStyle);
+        GUILayout.Space(4f);
+        bool isUncapped = _targetFps >= 241f;
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        GUILayout.Label(isUncapped ? "Uncapped" : $"{Mathf.RoundToInt(_targetFps)} FPS",
+                        _panelLabelStyle, GUILayout.Width(110f));
+        float newFps = GUILayout.HorizontalSlider(_targetFps, 30f, 241f,
+                                                   GUILayout.Width(segW - 120f));
+        newFps = Mathf.Round(newFps);
+        if (!Mathf.Approximately(newFps, _targetFps))
+        {
+            _targetFps = newFps;
+            Application.targetFrameRate = _targetFps >= 241f ? -1 : (int)_targetFps;
+        }
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(12f);
+
+        // ── HUD toggles ───────────────────────────────────────────────────
+        GUILayout.Label("HUD Overlays", _panelLabelStyle);
+        GUILayout.Space(4f);
         GUILayout.BeginHorizontal();
         GUILayout.FlexibleSpace();
         _showFps = GUILayout.Toggle(_showFps, "Show FPS", _toggleStyle);
@@ -369,6 +425,15 @@ public class GameBootstrap : MonoBehaviour
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    private static readonly float[] RenderScales = { 0.5f, 0.75f, 1.0f };
+
+    private static void ApplyRenderScale(int qualityIndex)
+    {
+        var urpAsset = GraphicsSettings.defaultRenderPipeline as UniversalRenderPipelineAsset;
+        if (urpAsset != null)
+            urpAsset.renderScale = RenderScales[qualityIndex];
+    }
 
     private void SetTransport(string ip, ushort port)
     {
@@ -416,7 +481,7 @@ public class GameBootstrap : MonoBehaviour
 
         _titleStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 64,
+            fontSize  = 80,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
             normal    = { textColor = Color.white }
@@ -424,7 +489,7 @@ public class GameBootstrap : MonoBehaviour
 
         _subtitleStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 22,
+            fontSize  = 28,
             fontStyle = FontStyle.Italic,
             alignment = TextAnchor.MiddleCenter,
             normal    = { textColor = new Color(0.8f, 0.8f, 0.8f) }
@@ -432,7 +497,7 @@ public class GameBootstrap : MonoBehaviour
 
         _panelTitleStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 32,
+            fontSize  = 40,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
             normal    = { textColor = Color.black }
@@ -440,25 +505,25 @@ public class GameBootstrap : MonoBehaviour
 
         _buttonStyle = new GUIStyle(GUI.skin.button)
         {
-            fontSize  = 22,
+            fontSize  = 28,
             fontStyle = FontStyle.Bold
         };
 
         _labelStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 18
+            fontSize = 23
         };
 
         _hudLabelStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 18,
+            fontSize  = 23,
             alignment = TextAnchor.MiddleRight,
             normal    = { textColor = Color.white }
         };
 
         _toggleStyle = new GUIStyle(GUI.skin.toggle)
         {
-            fontSize  = 20,
+            fontSize  = 25,
             alignment = TextAnchor.MiddleCenter,
             normal    = { textColor = Color.black },
             active    = { textColor = Color.black },
@@ -470,11 +535,24 @@ public class GameBootstrap : MonoBehaviour
             onFocused = { textColor = Color.black }
         };
 
-        _segActiveStyle = new GUIStyle(GUI.skin.button)
+        var sectionColor = new Color(0.25f, 0.25f, 0.25f);
+        _panelLabelStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 20,
+            fontSize  = 21,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
+            normal    = { textColor = sectionColor },
+            hover     = { textColor = sectionColor },
+            active    = { textColor = sectionColor }
+        };
+
+        _segActiveStyle = new GUIStyle(GUI.skin.button)
+        {
+            fontSize  = 25,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter,
+            border    = new RectOffset(0, 0, 0, 0),
+            padding   = new RectOffset(10, 10, 4, 4),
             normal    = { background = _segActiveTex,   textColor = Color.white },
             hover     = { background = _segActiveTex,   textColor = Color.white },
             active    = { background = _segActiveTex,   textColor = Color.white },
@@ -483,9 +561,11 @@ public class GameBootstrap : MonoBehaviour
 
         _segInactiveStyle = new GUIStyle(GUI.skin.button)
         {
-            fontSize  = 20,
+            fontSize  = 25,
             fontStyle = FontStyle.Normal,
             alignment = TextAnchor.MiddleCenter,
+            border    = new RectOffset(0, 0, 0, 0),
+            padding   = new RectOffset(10, 10, 4, 4),
             normal    = { background = _segInactiveTex, textColor = new Color(0.2f, 0.2f, 0.2f) },
             hover     = { background = _segInactiveTex, textColor = Color.black },
             active    = { background = _segInactiveTex, textColor = Color.black }
@@ -493,7 +573,7 @@ public class GameBootstrap : MonoBehaviour
 
         _textFieldStyle = new GUIStyle(GUI.skin.textField)
         {
-            fontSize = 18
+            fontSize = 23
         };
     }
 }
