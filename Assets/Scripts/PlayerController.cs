@@ -28,11 +28,19 @@ public class PlayerController : NetworkBehaviour
         _movementLockUntil = -1f;
     }
 
-    private static readonly Color[] TeamColors =
+    // Team base spawn positions (shared with PlayerHealth via static helper)
+    private static readonly Vector3[] TeamSpawnBase =
     {
-        new Color(0.2f, 0.4f, 0.9f),  // 0 = Blue
-        new Color(0.9f, 0.2f, 0.2f),  // 1 = Red
+        new Vector3(-14f, 1f, -14f),  // Team 0 — bottom-left end
+        new Vector3( 14f, 1f,  14f),  // Team 1 — top-right end
     };
+
+    public static Vector3 RandomSpawnForTeam(int team, float y)
+    {
+        Vector3 basePos = TeamSpawnBase[Mathf.Clamp(team, 0, TeamSpawnBase.Length - 1)];
+        Vector2 offset  = Random.insideUnitCircle * 2f;
+        return new Vector3(basePos.x + offset.x, y, basePos.z + offset.y);
+    }
 
     public NetworkVariable<Vector3> Position = new NetworkVariable<Vector3>(
         Vector3.zero,
@@ -46,12 +54,27 @@ public class PlayerController : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    public NetworkVariable<Color> PlayerColor = new NetworkVariable<Color>(
+        Color.white,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     public override void OnNetworkSpawn()
     {
-        Position.OnValueChanged  += OnPositionChanged;
-        TeamIndex.OnValueChanged += OnTeamChanged;
+        Position.OnValueChanged    += OnPositionChanged;
+        TeamIndex.OnValueChanged   += OnTeamChanged;
+        PlayerColor.OnValueChanged += OnPlayerColorChanged;
 
-        ApplyTeamColor(TeamIndex.Value);
+        if (IsServer)
+        {
+            PlayerColor.Value = Random.ColorHSV(0f, 1f, 0.7f, 1f, 0.8f, 1f);
+            Vector3 spawnPos  = RandomSpawnForTeam(TeamIndex.Value, groundY);
+            transform.position = spawnPos;
+            Position.Value     = spawnPos;
+        }
+
+        ApplyPlayerColor(PlayerColor.Value);
 
         if (!IsOwner)
         {
@@ -61,13 +84,14 @@ public class PlayerController : NetworkBehaviour
 
         CameraFollow cam = Camera.main?.GetComponent<CameraFollow>();
         cam?.SetTarget(transform);
-        cam?.SetTeam(TeamIndex.Value);   // set correct camera angle immediately
+        cam?.SetTeam(TeamIndex.Value);
     }
 
     public override void OnNetworkDespawn()
     {
-        Position.OnValueChanged  -= OnPositionChanged;
-        TeamIndex.OnValueChanged -= OnTeamChanged;
+        Position.OnValueChanged    -= OnPositionChanged;
+        TeamIndex.OnValueChanged   -= OnTeamChanged;
+        PlayerColor.OnValueChanged -= OnPlayerColorChanged;
     }
 
     private void OnPositionChanged(Vector3 previous, Vector3 current)
@@ -78,17 +102,18 @@ public class PlayerController : NetworkBehaviour
 
     private void OnTeamChanged(int previous, int current)
     {
-        ApplyTeamColor(current);
         if (IsOwner)
             Camera.main?.GetComponent<CameraFollow>()?.SetTeam(current);
     }
 
-    private void ApplyTeamColor(int team)
+    private void OnPlayerColorChanged(Color previous, Color current) => ApplyPlayerColor(current);
+
+    private void ApplyPlayerColor(Color color)
     {
         var r = GetComponent<Renderer>();
         if (r == null) return;
         var block = new MaterialPropertyBlock();
-        block.SetColor("_BaseColor", TeamColors[Mathf.Clamp(team, 0, TeamColors.Length - 1)]);
+        block.SetColor("_BaseColor", color);
         r.SetPropertyBlock(block);
     }
 

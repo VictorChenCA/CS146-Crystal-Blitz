@@ -15,12 +15,6 @@ public class PlayerHealth : NetworkBehaviour
     // World-space height above the player's origin to anchor the bar.
     private const float WorldHeadOffset = 2.3f;
 
-    // Spawn positions per team (along the diagonal lane).
-    private static readonly Vector3[] TeamSpawnPos =
-    {
-        new Vector3(-14f, 1f, -14f),  // Team 0 Blue — bottom-left end
-        new Vector3( 14f, 1f,  14f),  // Team 1 Red  — top-right end
-    };
 
     // Fired on the owner's client so GameBootstrap can show the countdown UI.
     public static event System.Action<float>  OnLocalPlayerDeath;
@@ -96,8 +90,10 @@ public class PlayerHealth : NetworkBehaviour
 
     private IEnumerator DespawnAndRespawn(ulong clientId)
     {
-        // Save team before the NetworkObject is removed.
-        int team = GetComponent<PlayerController>()?.TeamIndex.Value ?? 0;
+        // Save player state before the NetworkObject is removed.
+        var pc    = GetComponent<PlayerController>();
+        int team  = pc?.TeamIndex.Value ?? 0;
+        Color col = pc?.PlayerColor.Value ?? Color.white;
 
         // Despawn(false): removes from all clients' views but keeps this server-side
         // GO alive so the coroutine can finish.
@@ -110,13 +106,15 @@ public class PlayerHealth : NetworkBehaviour
 
         yield return new WaitForSeconds(respawnDelay);
 
-        var spawnPos = TeamSpawnPos[Mathf.Clamp(team, 0, TeamSpawnPos.Length - 1)];
+        var spawnPos = PlayerController.RandomSpawnForTeam(team, 1f);
         var prefab   = NetworkManager.Singleton.NetworkConfig.PlayerPrefab;
         var go       = Instantiate(prefab, spawnPos, Quaternion.identity);
         go.GetComponent<NetworkObject>().SpawnAsPlayerObject(clientId, true);
 
-        // Restore team — fires OnTeamChanged on all clients via NetworkVariable.
-        go.GetComponent<PlayerController>().TeamIndex.Value = team;
+        // Restore team and color via NetworkVariables.
+        var newPc = go.GetComponent<PlayerController>();
+        newPc.TeamIndex.Value   = team;
+        newPc.PlayerColor.Value = col;
 
         Destroy(gameObject);
     }
