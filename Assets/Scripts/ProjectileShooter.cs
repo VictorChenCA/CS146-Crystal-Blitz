@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Unity.Netcode;
@@ -14,10 +15,14 @@ public class ProjectileShooter : NetworkBehaviour
     [Header("Cooldown")]
     [SerializeField] private float fireCooldown = 2f;
 
+    [Header("Launch")]
+    [SerializeField] private float launchOffset = 0.5f;
+
     private readonly Plane _groundPlane = new Plane(Vector3.up, Vector3.zero);
     private Camera _mainCamera;
     private float _nextFireTime;
     private bool _charging;
+    private Coroutine _attackCoroutine;
 
     private LineRenderer _rangeRing;
     private LineRenderer _trajectoryLine;
@@ -65,25 +70,107 @@ public class ProjectileShooter : NetworkBehaviour
             _charging = false;
             _rangeRing.enabled      = false;
             _trajectoryLine.enabled = false;
-            TryFire();
+
+            if (SnapFireTarget(out Vector3 targetPos))
+            {
+                if (_attackCoroutine != null) StopCoroutine(_attackCoroutine);
+                _attackCoroutine = StartCoroutine(AttackSequence(targetPos));
+            }
         }
     }
 
-    private void TryFire()
+    private bool SnapFireTarget(out Vector3 targetPos)
     {
-        if (_mainCamera == null || projectilePrefab == null) return;
-        if (!GetGroundTarget(out Vector3 targetPos)) return;
+        targetPos = Vector3.zero;
+        if (_mainCamera == null || projectilePrefab == null) return false;
+        if (!GetGroundTarget(out Vector3 hit)) return false;
 
         Vector3 fp   = firePoint.position;
-        Vector3 flat = new Vector3(targetPos.x - fp.x, 0f, targetPos.z - fp.z);
+        Vector3 flat = new Vector3(hit.x - fp.x, 0f, hit.z - fp.z);
         if (flat.magnitude > maxRange)
             flat = flat.normalized * maxRange;
 
         targetPos = new Vector3(fp.x + flat.x, fp.y, fp.z + flat.z);
+        return true;
+    }
 
-        FireProjectileServerRpc(fp, targetPos, damage);
+    private IEnumerator AttackSequence(Vector3 targetPos)
+    {
+        var pc = GetComponent<PlayerController>();
+        pc?.LockMovement(0.5f);
+
+        // Compute offset start position toward target
+        Vector3 castDir   = targetPos - firePoint.position;
+        castDir.y = 0f;
+        castDir   = castDir.magnitude > 0.001f ? castDir.normalized : firePoint.forward;
+        Vector3 startPos  = firePoint.position + castDir * launchOffset;
+
+        // Phase 1: Cast (0.25 s) — local preview sphere grows from 0 to full size
+        Vector3 fullScale = projectilePrefab != null
+            ? projectilePrefab.transform.localScale
+            : Vector3.one * 0.3f;
+
+        GameObject preview = CreatePreviewSphere();
+        preview.transform.position = startPos;
+
+        const float castDuration = 0.25f;
+        float castEnd = Time.time + castDuration;
+        while (Time.time < castEnd)
+        {
+            if (HasMovementInput())
+            {
+                Destroy(preview);
+                pc?.CancelMovementLock();
+                _attackCoroutine = null;
+                yield break;
+            }
+            float t = 1f - (castEnd - Time.time) / castDuration;
+            preview.transform.localScale = Vector3.Lerp(Vector3.zero, fullScale, t);
+            yield return null;
+        }
+
+        Destroy(preview);
+
+        // Fire at end of cast phase
+        FireProjectileServerRpc(startPos, targetPos, damage);
         _nextFireTime = Time.time + fireCooldown;
-        GetComponent<PlayerController>()?.LockMovement(0.5f);
+
+        // Phase 2: Animation delay (0.25 s) — projectile in flight, can cancel lock early
+        float animEnd = Time.time + 0.25f;
+        while (Time.time < animEnd)
+        {
+            if (HasMovementInput())
+            {
+                pc?.CancelMovementLock();
+                _attackCoroutine = null;
+                yield break;
+            }
+            yield return null;
+        }
+
+        _attackCoroutine = null;
+    }
+
+    private GameObject CreatePreviewSphere()
+    {
+        var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        Destroy(go.GetComponent<Collider>());
+        go.transform.localScale = Vector3.zero;
+
+        var projRenderer = projectilePrefab != null ? projectilePrefab.GetComponent<Renderer>() : null;
+        if (projRenderer != null)
+            go.GetComponent<Renderer>().material = projRenderer.sharedMaterial;
+
+        return go;
+    }
+
+    private bool HasMovementInput()
+    {
+        if (Keyboard.current == null) return false;
+        return Keyboard.current.wKey.wasPressedThisFrame ||
+               Keyboard.current.sKey.wasPressedThisFrame ||
+               Keyboard.current.aKey.wasPressedThisFrame ||
+               Keyboard.current.dKey.wasPressedThisFrame;
     }
 
     private void UpdateRingPosition()

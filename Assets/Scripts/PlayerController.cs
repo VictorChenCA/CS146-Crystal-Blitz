@@ -23,6 +23,11 @@ public class PlayerController : NetworkBehaviour
         _movementLockUntil = Time.time + duration;
     }
 
+    public void CancelMovementLock()
+    {
+        _movementLockUntil = -1f;
+    }
+
     private static readonly Color[] TeamColors =
     {
         new Color(0.2f, 0.4f, 0.9f),  // 0 = Blue

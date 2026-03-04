@@ -232,6 +232,7 @@ MonoBehaviour:
   maxRange: 20
   damage: 20
   fireCooldown: 1
+  launchOffset: 1
 --- !u!114 &9173006632108536911
 MonoBehaviour:
   m_ObjectHideFlags: 0
