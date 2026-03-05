@@ -46,14 +46,16 @@ public class GameManager : MonoBehaviour
     private bool _useWasd = true;
 
     // ── Graphics / performance settings ──────────────────────────────────────
-    private int _qualityIndex = 1;       // 0=Low 1=Med 2=High
-    private float _targetFps = 60f;     // 241 = uncapped
+    private int   _qualityIndex = 1;       // 0=Low 1=Med 2=High
+    private float _targetFps   = 60f;     // 241 = uncapped
+    private float _uiScale     = 1f;
 
     // ── Textures (created in Awake, destroyed in OnDestroy) ──────────────────
     private Texture2D _dimOverlayTex;
     private Texture2D _whitePanelTex;
     private Texture2D _segActiveTex;
     private Texture2D _segInactiveTex;
+    private Texture2D _circleTex;
 
     // ── GUIStyles (lazy-initialized once) ────────────────────────────────────
     private GUIStyle _titleStyle;
@@ -80,10 +82,11 @@ public class GameManager : MonoBehaviour
 
     private void Awake()
     {
-        _dimOverlayTex = MakeTex(new Color(0f, 0f, 0f, 0.6f));
-        _whitePanelTex = MakeTex(new Color(1f, 1f, 1f, 0.95f));
-        _segActiveTex = MakeTex(new Color(0.18f, 0.38f, 0.72f, 1f));
+        _dimOverlayTex  = MakeTex(new Color(0f,    0f,    0f,   0.6f));
+        _whitePanelTex  = MakeTex(new Color(1f,    1f,    1f,   0.95f));
+        _segActiveTex   = MakeTex(new Color(0.18f, 0.38f, 0.72f, 1f));
         _segInactiveTex = MakeTex(new Color(0.82f, 0.82f, 0.82f, 1f));
+        _circleTex      = MakeCircleTex(128);
 
         ApplyRenderScale(_qualityIndex);
         Application.targetFrameRate = (int)_targetFps;
@@ -95,6 +98,7 @@ public class GameManager : MonoBehaviour
         Destroy(_whitePanelTex);
         Destroy(_segActiveTex);
         Destroy(_segInactiveTex);
+        Destroy(_circleTex);
     }
 
     private void OnEnable()
@@ -474,6 +478,22 @@ public class GameManager : MonoBehaviour
 
         GUILayout.Space(12f);
 
+        // ── UI Scale ──────────────────────────────────────────────────────
+        GUILayout.Label("UI Scale", _panelLabelStyle);
+        GUILayout.Space(4f);
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        GUILayout.Label($"{_uiScale:0.0}×", _panelLabelStyle, GUILayout.Width(60f));
+        float newScale = GUILayout.HorizontalSlider(_uiScale, 0.5f, 2f,
+                                                    GUILayout.Width(segW - 70f));
+        newScale = Mathf.Round(newScale * 10f) / 10f;
+        if (!Mathf.Approximately(newScale, _uiScale))
+            _uiScale = newScale;
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(12f);
+
         // ── HUD toggles ───────────────────────────────────────────────────
         GUILayout.Label("HUD Overlays", _panelLabelStyle);
         GUILayout.Space(4f);
@@ -501,7 +521,7 @@ public class GameManager : MonoBehaviour
         if (_useRelay && !string.IsNullOrEmpty(_joinCode) &&
             NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
         {
-            GUILayout.Label("Relay Join Code", _panelLabelStyle);
+            GUILayout.Label("Join Code", _panelLabelStyle);
             GUILayout.Space(4f);
             bool copied = Time.unscaledTime < _copiedUntil;
             GUILayout.BeginHorizontal();
@@ -530,10 +550,15 @@ public class GameManager : MonoBehaviour
             GUILayout.Space(8f);
         }
 
-        if (GUILayout.Button("Close  [ESC]", _buttonStyle))
-            _state = _settingsPreviousState;
-
         GUILayout.EndArea();
+
+        // ── Close button — top-right of panel ─────────────────────────────
+        bool fromInGame = _settingsPreviousState == UIState.InGame;
+        string closeLabel = fromInGame ? "✕" : "←";
+        float  cbSize = 48f;
+        if (GUI.Button(new Rect(panelR.xMax - cbSize - 8f, panelR.y + 8f, cbSize, cbSize),
+                       closeLabel, _buttonStyle))
+            _state = _settingsPreviousState;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -550,15 +575,16 @@ public class GameManager : MonoBehaviour
         var shooter = localObj.GetComponent<ProjectileShooter>();
         var pc      = localObj.GetComponent<PlayerController>();
 
-        // ── Layout constants ──────────────────────────────────────────────
-        const float padBottom    = 20f;
-        const float circleD      = 90f;
-        const float xpThickness  = 7f;
-        const float abilitySize  = 68f;
-        const float abilityGap   = 6f;
-        const float barH         = 14f;
-        const float barGap       = 5f;
-        const float circleColGap = 8f;
+        // ── Layout constants (scaled) ─────────────────────────────────────
+        float s            = _uiScale;
+        float padBottom    = 20f  * s;
+        float circleD      = 90f  * s;
+        float xpThickness  = 7f   * s;
+        float abilitySize  = 68f  * s;
+        float abilityGap   = 6f   * s;
+        float barH         = 14f  * s;
+        float barGap       = 5f   * s;
+        float circleColGap = 8f   * s;
 
         float colH   = abilitySize + barGap + barH + barGap + barH;  // 106
         float colW   = abilitySize * 2f + abilityGap;                 // 142
@@ -575,14 +601,17 @@ public class GameManager : MonoBehaviour
 
         // ── Player name above circle ──────────────────────────────────────
         string playerName = $"Player {(nm.LocalClientId + 1)}";
-        float  nameW = 100f, nameH = 20f;
+        float  nameW = 100f * s, nameH = 20f * s;
+        _levelStyle.fontSize = Mathf.RoundToInt(16f * s);
         GUI.Label(new Rect(circleC.x - nameW * 0.5f, circleTop - nameH - 2f, nameW, nameH),
                   playerName, _levelStyle);
 
-        // ── Profile picture (plain rect, player color) ────────────────────
-        Color profileCol = pc != null ? pc.PlayerColor.Value : Color.gray;
+        // ── Profile picture (empty circle) ───────────────────────────────
         float innerR = circleR - xpThickness - 2f;
-        DrawRect(circleC.x - innerR, circleC.y - innerR, innerR * 2f, innerR * 2f, profileCol);
+        GUI.color = new Color(0.1f, 0.1f, 0.1f, 0.9f);
+        GUI.DrawTexture(new Rect(circleC.x - innerR, circleC.y - innerR, innerR * 2f, innerR * 2f),
+                        _circleTex);
+        GUI.color = Color.white;
 
         float xpRingR = circleR - xpThickness * 0.5f;
         // Background ring (full 270°, dark)
@@ -591,7 +620,8 @@ public class GameManager : MonoBehaviour
         DrawArc(circleC, xpRingR, xpThickness, 135f, 270f, 0f, new Color(1f, 0.78f, 0.08f, 1f));
 
         // Level number below the circle
-        float lvlW = 40f, lvlH = 20f;
+        float lvlW = 40f * s, lvlH = 20f * s;
+        _levelStyle.fontSize = Mathf.RoundToInt(14f * s);
         GUI.Label(new Rect(circleC.x - lvlW * 0.5f, circleTop + circleD - 2f, lvlW, lvlH),
                   "1", _levelStyle);
 
@@ -777,6 +807,21 @@ public class GameManager : MonoBehaviour
     {
         var tex = new Texture2D(1, 1);
         tex.SetPixel(0, 0, color);
+        tex.Apply();
+        return tex;
+    }
+
+    private static Texture2D MakeCircleTex(int size)
+    {
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        float r = size * 0.5f;
+        float r2 = r * r;
+        for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+        {
+            float dx = x - r + 0.5f, dy = y - r + 0.5f;
+            tex.SetPixel(x, y, dx * dx + dy * dy <= r2 ? Color.white : Color.clear);
+        }
         tex.Apply();
         return tex;
     }

@@ -76,6 +76,7 @@ public class ProjectileShooter : NetworkBehaviour
             _charging = false;
             _rangeRing.enabled      = false;
             _trajectoryLine.enabled = false;
+            _nextFireTime           = Time.time + fireCooldown;  // cooldown starts on release
 
             if (SnapFireTarget(out Vector3 targetPos))
             {
@@ -126,6 +127,7 @@ public class ProjectileShooter : NetworkBehaviour
             {
                 Destroy(preview);
                 pc?.CancelMovementLock();
+                _nextFireTime    = Time.time + fireCooldown * 0.5f;  // half cooldown on cancel
                 _attackCoroutine = null;
                 yield break;
             }
@@ -139,7 +141,6 @@ public class ProjectileShooter : NetworkBehaviour
 
         // Fire at end of cast phase
         FireProjectileServerRpc(startPos, targetPos, damage);
-        _nextFireTime = Time.time + fireCooldown;
 
         // Phase 2: Animation delay — projectile in flight, can cancel lock early
         float animEnd = Time.time + animationDelay;
