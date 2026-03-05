@@ -447,6 +447,7 @@ MonoBehaviour:
   originOffset: {x: -5, y: 0, z: -10}
   originPullX: 0.2
   originPullY: 0.15
+  originRotation: 0
 --- !u!1 &1779307990
 GameObject:
   m_ObjectHideFlags: 0
