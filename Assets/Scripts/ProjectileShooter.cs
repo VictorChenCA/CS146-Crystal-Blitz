@@ -22,11 +22,14 @@ public class ProjectileShooter : NetworkBehaviour
     [Header("Launch")]
     [SerializeField] private float launchOffset = 0.5f;
 
-    public float CooldownFraction => Mathf.Clamp01((_nextFireTime - Time.time) / fireCooldown);
+    public float CooldownFraction  => Mathf.Clamp01((_nextFireTime - Time.time) / fireCooldown);
+    public float CooldownRemaining => Mathf.Max(0f, _nextFireTime - Time.time);
+    public float CastFraction      => _castFraction;
 
     private readonly Plane _groundPlane = new Plane(Vector3.up, Vector3.zero);
     private Camera _mainCamera;
     private float _nextFireTime;
+    private float _castFraction;
     private bool _charging;
     private Coroutine _attackCoroutine;
 
@@ -76,7 +79,6 @@ public class ProjectileShooter : NetworkBehaviour
             _charging = false;
             _rangeRing.enabled      = false;
             _trajectoryLine.enabled = false;
-            _nextFireTime           = Time.time + fireCooldown;  // cooldown starts on release
 
             if (SnapFireTarget(out Vector3 targetPos))
             {
@@ -127,20 +129,23 @@ public class ProjectileShooter : NetworkBehaviour
             {
                 Destroy(preview);
                 pc?.CancelMovementLock();
-                _nextFireTime    = Time.time + fireCooldown * 0.5f;  // half cooldown on cancel
+                _castFraction    = 0f;
                 _attackCoroutine = null;
                 yield break;
             }
             float t = 1f - (castEnd - Time.time) / castDelay;
+            _castFraction = t;
             preview.transform.localScale = Vector3.Lerp(Vector3.zero, fullScale, t);
             previewRenderer.material.color = Color.Lerp(Color.white, Color.yellow, Mathf.Pow(t, 3f));
             yield return null;
         }
 
+        _castFraction = 0f;
         Destroy(preview);
 
-        // Fire at end of cast phase
+        // Fire at end of cast phase — cooldown starts here
         FireProjectileServerRpc(startPos, targetPos, damage);
+        _nextFireTime = Time.time + fireCooldown;
 
         // Phase 2: Animation delay — projectile in flight, can cancel lock early
         float animEnd = Time.time + animationDelay;

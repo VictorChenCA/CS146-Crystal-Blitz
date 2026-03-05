@@ -625,11 +625,26 @@ public class GameManager : MonoBehaviour
         GUI.Label(new Rect(circleC.x - lvlW * 0.5f, circleTop + circleD - 2f, lvlW, lvlH),
                   "1", _levelStyle);
 
-        // ── Ability 1 — projectile (with cooldown overlay) ───────────────
+        // ── Ability 1 — projectile ───────────────────────────────────────
         DrawRect(abX, colTop, abilitySize, abilitySize, new Color(0.12f, 0.12f, 0.12f, 0.92f));
-        float cd = shooter != null ? shooter.CooldownFraction : 0f;
-        if (cd > 0.01f)
+
+        float cast = shooter != null ? shooter.CastFraction : 0f;
+        float cd   = shooter != null ? shooter.CooldownFraction : 0f;
+
+        if (cast > 0.01f)
+        {
+            // Cast bar: white transparent fill growing upward from bottom
+            float fillH = cast * abilitySize;
+            DrawRect(abX, colTop + abilitySize - fillH, abilitySize, fillH, new Color(1f, 1f, 1f, 0.35f));
+        }
+        else if (cd > 0.01f)
+        {
+            // Cooldown overlay: dark, anchored at bottom, shrinking upward
             DrawRect(abX, colTop + abilitySize * (1f - cd), abilitySize, cd * abilitySize, new Color(0f, 0f, 0f, 0.5f));
+            _levelStyle.fontSize = Mathf.RoundToInt(16f * s);
+            GUI.Label(new Rect(abX, colTop, abilitySize, abilitySize),
+                      shooter.CooldownRemaining.ToString("0.0"), _levelStyle);
+        }
 
         // ── Ability 2 — placeholder ───────────────────────────────────────
         DrawRect(abX + abilitySize + abilityGap, colTop, abilitySize, abilitySize,
