@@ -63,7 +63,6 @@ public class PlayerController : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         Position.OnValueChanged    += OnPositionChanged;
-        TeamIndex.OnValueChanged   += OnTeamChanged;
         PlayerColor.OnValueChanged += OnPlayerColorChanged;
 
         if (IsServer)
@@ -84,13 +83,11 @@ public class PlayerController : NetworkBehaviour
 
         CameraFollow cam = Camera.main?.GetComponent<CameraFollow>();
         cam?.SetTarget(transform);
-        cam?.SetTeam(TeamIndex.Value);
     }
 
     public override void OnNetworkDespawn()
     {
         Position.OnValueChanged    -= OnPositionChanged;
-        TeamIndex.OnValueChanged   -= OnTeamChanged;
         PlayerColor.OnValueChanged -= OnPlayerColorChanged;
     }
 
@@ -100,13 +97,7 @@ public class PlayerController : NetworkBehaviour
             transform.position = current;
     }
 
-    private void OnTeamChanged(int previous, int current)
-    {
-        if (IsOwner)
-            Camera.main?.GetComponent<CameraFollow>()?.SetTeam(current);
-    }
-
-    private void OnPlayerColorChanged(Color previous, Color current) => ApplyPlayerColor(current);
+private void OnPlayerColorChanged(Color previous, Color current) => ApplyPlayerColor(current);
 
     private void ApplyPlayerColor(Color color)
     {

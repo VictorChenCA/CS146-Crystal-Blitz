@@ -7,15 +7,12 @@ public class CameraFollow : MonoBehaviour
     [Header("Smoothing")]
     [SerializeField] private float smoothSpeed = 8f;
 
-    [Header("Team Camera Positions")]
-    // Index 0 = Team Blue (O key), Index 1 = Team Red (P key).
-    // Offsets mirror the diagonal lane so each team's camera sits behind them.
-    [SerializeField] private Vector3[] teamOffsets    = { new Vector3(-7f, 10f, -7f), new Vector3(7f, 10f, 7f) };
-    [SerializeField] private Vector3[] teamRotations  = { new Vector3(45f, 45f, 0f),  new Vector3(45f, 225f, 0f) };
-
-    // Active values — driven by SetTeam(); serialized so they show in inspector.
+    [Header("Camera")]
     [SerializeField] private Vector3 offset         = new Vector3(-7f, 10f, -7f);
     [SerializeField] private Vector3 cameraRotation = new Vector3(45f, 45f, 0f);
+    // How strongly the camera shifts toward the origin as the player moves away.
+    // 0 = pure follow; 0.5 = halfway between player and origin; 1 = locked to origin.
+    [SerializeField] private float originPullFactor = 0.3f;
 
     private Transform _target;
 
@@ -27,17 +24,14 @@ public class CameraFollow : MonoBehaviour
     public void SetTarget(Transform target)
     {
         _target = target;
-        transform.position = _target.position + offset;
+        transform.position = DesiredPosition(_target.position);
     }
 
-    public void SetTeam(int team)
+    private Vector3 DesiredPosition(Vector3 playerPos)
     {
-        int i = Mathf.Clamp(team, 0, Mathf.Min(teamOffsets.Length, teamRotations.Length) - 1);
-        offset         = teamOffsets[i];
-        cameraRotation = teamRotations[i];
-        transform.rotation = Quaternion.Euler(cameraRotation);
-        if (_target != null)
-            transform.position = _target.position + offset;
+        // Pull the camera toward origin proportionally to the player's distance from it.
+        Vector3 originPull = -playerPos * originPullFactor;
+        return playerPos + offset + originPull;
     }
 
     private void LateUpdate()
@@ -45,7 +39,7 @@ public class CameraFollow : MonoBehaviour
         if (_target == null) return;
         transform.position = Vector3.Lerp(
             transform.position,
-            _target.position + offset,
+            DesiredPosition(_target.position),
             smoothSpeed * Time.deltaTime
         );
     }
@@ -54,7 +48,7 @@ public class CameraFollow : MonoBehaviour
     {
         Quaternion rot      = Quaternion.Euler(cameraRotation);
         Vector3    playerPos = _target != null ? _target.position : transform.position - offset;
-        Vector3    camPos    = playerPos + offset;
+        Vector3    camPos    = DesiredPosition(playerPos);
 
         Gizmos.color = Color.green;
         Gizmos.DrawWireSphere(playerPos, 0.3f);
