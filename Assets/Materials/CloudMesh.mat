@@ -30,8 +30,8 @@ Material:
     - _DispDetailStrength: 0.711
     - _DispScale: 3
     - _DispStrength: 0.7
-    - _FresnelPower: 1.4
-    - _FresnelStrength: 2
+    - _FresnelPower: 10
+    - _FresnelStrength: 0.1
     - _NormalScale: 2
     - _NormalStrength: 0.3
     m_Colors:
