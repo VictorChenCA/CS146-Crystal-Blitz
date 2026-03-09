@@ -660,7 +660,7 @@ public class GameManager : MonoBehaviour
         string keybind1 = GameSettings.UseWasd ? "Space" : "Q";
         _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
         _levelStyle.alignment = TextAnchor.LowerLeft;
-        GUI.Label(new Rect(abX + 3f * s, colTop, abilitySize * 0.5f, abilitySize - 3f * s),
+        GUI.Label(new Rect(abX + 3f * s, colTop, abilitySize - 3f * s, abilitySize - 3f * s),
                   keybind1, _levelStyle);
         _levelStyle.alignment = TextAnchor.UpperCenter;
 

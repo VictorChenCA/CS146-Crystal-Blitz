@@ -26,6 +26,7 @@ public class AutoAttacker : NetworkBehaviour
 
     private PlayerController _pc;
     private Camera           _mainCamera;
+    private readonly Plane   _groundPlane = new Plane(Vector3.up, Vector3.zero);
 
     private Transform      _target;
     private NetworkObject  _targetNetObj;
@@ -37,6 +38,12 @@ public class AutoAttacker : NetworkBehaviour
 
     private Texture2D _cursorDefault;
     private Texture2D _cursorAttack;
+
+    // ── Attack-move indicator ─────────────────────────────────────────────────
+    private LineRenderer _attackMoveIndicator;
+    private Vector3      _attackMoveCenter;
+    private float        _attackMoveFadeUntil;
+    private const float  AttackMoveIndicatorDuration = 0.7f;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -52,6 +59,7 @@ public class AutoAttacker : NetworkBehaviour
         _mainCamera = Camera.main;
 
         BuildCursorTextures();
+        CreateAttackMoveIndicator();
         Cursor.visible   = true;
         Cursor.lockState = CursorLockMode.None;
         Cursor.SetCursor(_cursorDefault, new Vector2(8f, 8f), CursorMode.Auto);
@@ -63,6 +71,7 @@ public class AutoAttacker : NetworkBehaviour
         Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
         if (_cursorDefault) Destroy(_cursorDefault);
         if (_cursorAttack)  Destroy(_cursorAttack);
+        if (_attackMoveIndicator) Destroy(_attackMoveIndicator.gameObject);
     }
 
     private void OnDestroy()
@@ -77,6 +86,7 @@ public class AutoAttacker : NetworkBehaviour
         if (_mainCamera == null) return;
         if (Mouse.current == null) return;
         UpdateHoverDetection();
+        UpdateAttackMoveIndicator();
     }
 
     // ── Hover detection ───────────────────────────────────────────────────────
@@ -114,23 +124,50 @@ public class AutoAttacker : NetworkBehaviour
     // ── Right-click interception (called by PlayerController) ─────────────────
 
     /// <summary>
-    /// Returns true if the right-click was consumed for auto-attack.
+    /// Returns true if the right-click was consumed for auto-attack or attack-move.
     /// PlayerController calls this first; if false, it handles movement itself.
     /// </summary>
-    public bool TryHandleRightClick(bool isNewPress)
+    public bool TryHandleRightClick(bool isNewPress, bool isShift = false)
     {
+        // ── Attack move: Shift + right-click in P&C mode ──────────────────────
+        if (isShift && isNewPress && !GameSettings.UseWasd)
+        {
+            if (GetCursorWorldPos(out Vector3 worldPos))
+            {
+                ShowAttackMoveIndicator(worldPos);
+                Transform enemy = FindNearestEnemyAt(worldPos, 1f);
+                if (enemy != null)
+                {
+                    var netObj = enemy.GetComponent<NetworkObject>()
+                              ?? enemy.GetComponentInParent<NetworkObject>();
+                    if (netObj != null)
+                    {
+                        _target       = enemy;
+                        _targetNetObj = netObj;
+                        if (_attackCoroutine != null) StopCoroutine(_attackCoroutine);
+                        _attackCoroutine = StartCoroutine(AutoAttackLoop());
+                        return true;
+                    }
+                }
+                // No enemy nearby — move to the position
+                _pc?.SetNavDestination(worldPos);
+            }
+            return true;
+        }
+
+        // ── Normal: hovering an enemy ─────────────────────────────────────────
         if (_hoveredEnemy == null) return false;
 
         // While hovering an enemy, consume the input even on hold to prevent
         // movement orders from firing simultaneously.
         if (!isNewPress) return true;
 
-        var netObj = _hoveredEnemy.GetComponent<NetworkObject>()
-                  ?? _hoveredEnemy.GetComponentInParent<NetworkObject>();
-        if (netObj == null) return false;
+        var hoverNetObj = _hoveredEnemy.GetComponent<NetworkObject>()
+                       ?? _hoveredEnemy.GetComponentInParent<NetworkObject>();
+        if (hoverNetObj == null) return false;
 
         _target       = _hoveredEnemy;
-        _targetNetObj = netObj;
+        _targetNetObj = hoverNetObj;
         if (_attackCoroutine != null) StopCoroutine(_attackCoroutine);
         _attackCoroutine = StartCoroutine(AutoAttackLoop());
         return true;
@@ -264,6 +301,93 @@ public class AutoAttacker : NetworkBehaviour
 
         var controller = proj.GetComponent<HomingProjectileController>();
         controller.Initialize(targetHealth, projectileSpeed, OwnerClientId, dmg);
+    }
+
+    // ── Attack-move helpers ───────────────────────────────────────────────────
+
+    private bool GetCursorWorldPos(out Vector3 worldPos)
+    {
+        worldPos = Vector3.zero;
+        if (_mainCamera == null || Mouse.current == null) return false;
+        Vector2 mousePos = Mouse.current.position.ReadValue();
+        Ray ray = _mainCamera.ScreenPointToRay(new Vector3(mousePos.x, mousePos.y, 0f));
+        if (_groundPlane.Raycast(ray, out float dist))
+        {
+            worldPos = ray.GetPoint(dist);
+            return true;
+        }
+        return false;
+    }
+
+    private Transform FindNearestEnemyAt(Vector3 worldPos, float radius)
+    {
+        int myTeam = _pc != null ? _pc.TeamIndex.Value : -1;
+        Transform nearest = null;
+        float nearestDist = float.MaxValue;
+
+        foreach (var pc in FindObjectsByType<PlayerController>(FindObjectsSortMode.None))
+        {
+            if (pc == _pc) continue;
+            if (pc.TeamIndex.Value == myTeam) continue;
+            float dist = Vector3.Distance(worldPos, pc.transform.position);
+            if (dist <= radius && dist < nearestDist)
+            {
+                nearest = pc.transform;
+                nearestDist = dist;
+            }
+        }
+        return nearest;
+    }
+
+    // ── Attack-move indicator ─────────────────────────────────────────────────
+
+    private void CreateAttackMoveIndicator()
+    {
+        var go = new GameObject("AttackMoveIndicator");
+        _attackMoveIndicator = go.AddComponent<LineRenderer>();
+        _attackMoveIndicator.positionCount     = 17;
+        _attackMoveIndicator.loop              = false;
+        _attackMoveIndicator.startWidth        = 0.08f;
+        _attackMoveIndicator.endWidth          = 0.08f;
+        _attackMoveIndicator.useWorldSpace     = true;
+        _attackMoveIndicator.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        _attackMoveIndicator.receiveShadows    = false;
+
+        var mat = new Material(Shader.Find("Sprites/Default"));
+        mat.color = Color.red;
+        _attackMoveIndicator.material = mat;
+        _attackMoveIndicator.enabled  = false;
+    }
+
+    private void ShowAttackMoveIndicator(Vector3 center)
+    {
+        if (_attackMoveIndicator == null) return;
+        _attackMoveCenter    = new Vector3(center.x, 0.05f, center.z);
+        _attackMoveFadeUntil = Time.time + AttackMoveIndicatorDuration;
+        _attackMoveIndicator.enabled = true;
+    }
+
+    private void UpdateAttackMoveIndicator()
+    {
+        if (_attackMoveIndicator == null || !_attackMoveIndicator.enabled) return;
+
+        float remaining = _attackMoveFadeUntil - Time.time;
+        if (remaining <= 0f)
+        {
+            _attackMoveIndicator.enabled = false;
+            return;
+        }
+
+        float r = 0.45f;
+        for (int i = 0; i <= 16; i++)
+        {
+            float angle = i / 16f * Mathf.PI * 2f;
+            _attackMoveIndicator.SetPosition(i, _attackMoveCenter + new Vector3(
+                Mathf.Cos(angle) * r, 0f, Mathf.Sin(angle) * r));
+        }
+
+        float alpha = Mathf.Clamp01(remaining / AttackMoveIndicatorDuration);
+        _attackMoveIndicator.material.color = new Color(1f, 0f, 0f, alpha);
     }
 
     // ── Cursor textures (procedural) ──────────────────────────────────────────

@@ -222,6 +222,10 @@ public class PlayerController : NetworkBehaviour
         }
 
         if (_agent == null || !_agent.enabled) return;
+
+        // Keep agent speed in sync with moveSpeed so both modes are always identical
+        _agent.speed = moveSpeed;
+
         if (_agent.hasPath && _agent.velocity.sqrMagnitude > 0.01f)
             SubmitPositionServerRpc(transform.position);
     }
@@ -241,8 +245,10 @@ public class PlayerController : NetworkBehaviour
         bool held    = Mouse.current.rightButton.isPressed && !pressed;
         if (!pressed && !held) return;
 
+        bool isShift = Keyboard.current != null && Keyboard.current.shiftKey.isPressed;
+
         // Let AutoAttacker intercept for enemy targeting (works in both modes)
-        if (_autoAttacker != null && _autoAttacker.TryHandleRightClick(pressed)) return;
+        if (_autoAttacker != null && _autoAttacker.TryHandleRightClick(pressed, isShift)) return;
 
         // Ground movement — P&C mode only
         if (GameSettings.UseWasd) return;
