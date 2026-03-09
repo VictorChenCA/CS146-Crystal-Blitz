@@ -20,25 +20,22 @@ public class PlayerController : NetworkBehaviour
     // ── Movement lock (used by ProjectileShooter / AutoAttacker) ─────────────
     private float _movementLockUntil;
 
-    public void LockMovement(float duration)
-    {
-        _movementLockUntil = Time.time + duration;
-    }
-
-    public void CancelMovementLock()
-    {
-        _movementLockUntil = -1f;
-    }
+    public void LockMovement(float duration)  => _movementLockUntil = Time.time + duration;
+    public void CancelMovementLock()          => _movementLockUntil = -1f;
 
     // ── NavMesh ───────────────────────────────────────────────────────────────
     private NavMeshAgent _agent;
 
+    // ── Right-click input (ground plane for P&C movement) ────────────────────
+    private AutoAttacker           _autoAttacker;
+    private readonly Plane         _groundPlane = new Plane(Vector3.up, Vector3.zero);
+
     // ── Click indicator (owner-only visual ring at nav destination) ───────────
     private LineRenderer _clickIndicator;
     private Vector3      _indicatorCenter;
-    private float        _indicatorShowTime;   // Time.time when ring last triggered
+    private float        _indicatorShowTime;
     private float        _indicatorFadeUntil;
-    private float        _indicatorNextShow;   // throttle: don't re-trigger before this
+    private float        _indicatorNextShow;
     private const float  IndicatorDuration       = 0.7f;
     private const float  IndicatorThrottle       = 0.25f;
     private const float  IndicatorExpandDuration = 0.2f;
@@ -47,8 +44,8 @@ public class PlayerController : NetworkBehaviour
     // ── Spawn helpers ─────────────────────────────────────────────────────────
     private static readonly Vector3[] TeamSpawnBase =
     {
-        new Vector3(-14f, 1f, -14f),  // Team 0 — bottom-left end
-        new Vector3( 14f, 1f,  14f),  // Team 1 — top-right end
+        new Vector3(-14f, 1f, -14f),
+        new Vector3( 14f, 1f,  14f),
     };
 
     public static Vector3 RandomSpawnForTeam(int team, float y)
@@ -88,8 +85,8 @@ public class PlayerController : NetworkBehaviour
 
         if (IsServer)
         {
-            PlayerColor.Value = Random.ColorHSV(0f, 1f, 0.7f, 1f, 0.8f, 1f);
-            Vector3 spawnPos  = RandomSpawnForTeam(TeamIndex.Value, groundY);
+            PlayerColor.Value  = Random.ColorHSV(0f, 1f, 0.7f, 1f, 0.8f, 1f);
+            Vector3 spawnPos   = RandomSpawnForTeam(TeamIndex.Value, groundY);
             transform.position = spawnPos;
             Position.Value     = spawnPos;
         }
@@ -98,24 +95,22 @@ public class PlayerController : NetworkBehaviour
 
         if (!IsOwner)
         {
-            // Disable agent on non-owners so it doesn't interfere with
-            // position updates coming in via OnPositionChanged.
             if (_agent != null) _agent.enabled = false;
             enabled = false;
             return;
         }
 
-        // Configure agent for owner
         if (_agent != null)
         {
-            _agent.speed           = moveSpeed;
-            _agent.angularSpeed    = 9999f;
-            _agent.acceleration    = 50f;
+            _agent.speed            = moveSpeed;
+            _agent.angularSpeed     = 9999f;
+            _agent.acceleration     = 9999f;   // instant acceleration
+            _agent.autoBraking      = false;   // no deceleration near destination
             _agent.stoppingDistance = 0.15f;
-            _agent.updateRotation  = false;
-            _agent.autoBraking     = true;
+            _agent.updateRotation   = false;
         }
 
+        _autoAttacker = GetComponent<AutoAttacker>();
         CreateClickIndicator();
 
         CameraFollow cam = Camera.main?.GetComponent<CameraFollow>();
@@ -135,8 +130,7 @@ public class PlayerController : NetworkBehaviour
 
     private void OnPositionChanged(Vector3 previous, Vector3 current)
     {
-        if (!IsOwner)
-            transform.position = current;
+        if (!IsOwner) transform.position = current;
     }
 
     private void OnPlayerColorChanged(Color previous, Color current) => ApplyPlayerColor(current);
@@ -158,10 +152,11 @@ public class PlayerController : NetworkBehaviour
         HandleTeamSwitch();
 
         if (GameSettings.UseWasd)
-            HandleMovement();
+            HandleWasdMovement();
         else
-            HandleClickToMove();
+            SyncNavMovement();
 
+        HandleRightClickInput();
         UpdateClickIndicator();
     }
 
@@ -181,7 +176,7 @@ public class PlayerController : NetworkBehaviour
 
     // ── WASD movement ─────────────────────────────────────────────────────────
 
-    private void HandleMovement()
+    private void HandleWasdMovement()
     {
         if (Time.time < _movementLockUntil) return;
 
@@ -195,14 +190,12 @@ public class PlayerController : NetworkBehaviour
 
         if (fwdInput == 0f && rightInput == 0f) return;
 
-        // Cancel any NavMesh path so WASD and P&C don't fight
         _agent?.ResetPath();
 
         Vector3 move   = (LaneForward * fwdInput + LaneRight * rightInput).normalized;
         Vector3 newPos = ClampToLane(transform.position + move * moveSpeed * Time.deltaTime);
 
-        // Don't force a fixed Y — let the NavMeshAgent own the vertical position
-        // so its surface-snapping and our XZ movement agree on height.
+        // Preserve the agent's natural Y so it doesn't fight the NavMesh surface
         if (_agent != null && _agent.enabled)
             newPos.y = _agent.nextPosition.y;
 
@@ -212,26 +205,55 @@ public class PlayerController : NetworkBehaviour
         SubmitPositionServerRpc(newPos);
     }
 
-    // ── Point & Click movement (NavMesh) ──────────────────────────────────────
+    // ── NavMesh sync (P&C mode) ───────────────────────────────────────────────
 
-    /// <summary>
-    /// Syncs the NavMeshAgent's movement to the server each frame.
-    /// Right-click input is handled externally by AutoAttacker (which calls SetNavDestination).
-    /// </summary>
-    private void HandleClickToMove()
+    /// <summary>Syncs the NavMeshAgent's movement to the server each frame.</summary>
+    private void SyncNavMovement()
     {
-        if (_agent == null || !_agent.enabled) return;
-        if (Time.time < _movementLockUntil) return;
+        // S = full stop in P&C mode
+        if (Keyboard.current != null && Keyboard.current.sKey.wasPressedThisFrame)
+        {
+            StopNavMovement();
+            _autoAttacker?.CancelAutoAttack();
+        }
 
-        // Sync to server while NavMesh is actively moving the object
+        if (_agent == null || !_agent.enabled) return;
         if (_agent.hasPath && _agent.velocity.sqrMagnitude > 0.01f)
             SubmitPositionServerRpc(transform.position);
     }
 
+    // ── Right-click input (both modes) ────────────────────────────────────────
+
     /// <summary>
-    /// Sets a NavMesh destination (called by AutoAttacker for both P&C moves and AA chasing).
-    /// Applies lane clamping and shows the click indicator.
+    /// Reads right-click every frame regardless of movement mode.
+    /// AutoAttacker gets first refusal (enemy hover → AA).
+    /// Ground clicks navigate only in P&C mode.
     /// </summary>
+    private void HandleRightClickInput()
+    {
+        if (Mouse.current == null) return;
+
+        bool pressed = Mouse.current.rightButton.wasPressedThisFrame;
+        bool held    = Mouse.current.rightButton.isPressed && !pressed;
+        if (!pressed && !held) return;
+
+        // Let AutoAttacker intercept for enemy targeting (works in both modes)
+        if (_autoAttacker != null && _autoAttacker.TryHandleRightClick(pressed)) return;
+
+        // Ground movement — P&C mode only
+        if (GameSettings.UseWasd) return;
+        if (pressed) _autoAttacker?.CancelAutoAttack();
+        if (Time.time < _movementLockUntil) return;
+
+        Vector2 mousePos = Mouse.current.position.ReadValue();
+        Ray ray = Camera.main.ScreenPointToRay(new Vector3(mousePos.x, mousePos.y, 0f));
+        if (_groundPlane.Raycast(ray, out float dist))
+            SetNavDestination(ray.GetPoint(dist));
+    }
+
+    // ── Public NavMesh API (used by AutoAttacker) ─────────────────────────────
+
+    /// <summary>Player-commanded move: clamps to lane and shows click indicator.</summary>
     public void SetNavDestination(Vector3 worldPos)
     {
         if (_agent == null || !_agent.enabled) return;
@@ -239,13 +261,18 @@ public class PlayerController : NetworkBehaviour
 
         Vector3 dest = ClampToLane(worldPos);
         _agent.SetDestination(dest);
-        if (!GameSettings.UseWasd) ShowClickIndicator(dest);
+        ShowClickIndicator(dest);
     }
 
-    /// <summary>
-    /// Exposes the NavMeshAgent so AutoAttacker can set destinations directly for chasing.
-    /// </summary>
-    public NavMeshAgent GetNavAgent() => _agent;
+    /// <summary>AA-commanded chase: no lane clamp, no indicator.</summary>
+    public void SetChaseDestination(Vector3 worldPos)
+    {
+        if (_agent == null || !_agent.enabled) return;
+        _agent.SetDestination(worldPos);
+    }
+
+    /// <summary>Cancels any active NavMesh path.</summary>
+    public void StopNavMovement() => _agent?.ResetPath();
 
     // ── Server RPC ────────────────────────────────────────────────────────────
 
@@ -274,7 +301,7 @@ public class PlayerController : NetworkBehaviour
         var go = new GameObject("ClickIndicator");
         _clickIndicator = go.AddComponent<LineRenderer>();
 
-        _clickIndicator.positionCount     = 17; // 16 segments + wrap-around point
+        _clickIndicator.positionCount     = 17;
         _clickIndicator.loop              = false;
         _clickIndicator.startWidth        = 0.08f;
         _clickIndicator.endWidth          = 0.08f;
@@ -292,7 +319,6 @@ public class PlayerController : NetworkBehaviour
     private void ShowClickIndicator(Vector3 center)
     {
         if (_clickIndicator == null) return;
-        // Throttle: ignore calls that arrive too soon after the last ring
         if (Time.time < _indicatorNextShow) return;
 
         _indicatorCenter    = new Vector3(center.x, 0.05f, center.z);
@@ -313,7 +339,6 @@ public class PlayerController : NetworkBehaviour
             return;
         }
 
-        // Expand from 0 → full radius over IndicatorExpandDuration
         float expandT = Mathf.Clamp01((Time.time - _indicatorShowTime) / IndicatorExpandDuration);
         float r       = Mathf.Lerp(0f, IndicatorFullRadius, expandT);
 
@@ -324,7 +349,6 @@ public class PlayerController : NetworkBehaviour
                 Mathf.Cos(angle) * r, 0f, Mathf.Sin(angle) * r));
         }
 
-        // Fade alpha linearly over the full lifetime
         float alpha = Mathf.Clamp01(remaining / IndicatorDuration);
         _clickIndicator.material.color = new Color(1f, 1f, 1f, alpha);
     }
@@ -341,10 +365,7 @@ public class PlayerController : NetworkBehaviour
 
         Matrix4x4 prev = Gizmos.matrix;
         Gizmos.matrix = Matrix4x4.TRS(center, rot, Vector3.one);
-
-        Gizmos.DrawWireCube(Vector3.zero,
-            new Vector3(halfLaneWidth * 2f, 0.1f, maxLane - minLane));
-
+        Gizmos.DrawWireCube(Vector3.zero, new Vector3(halfLaneWidth * 2f, 0.1f, maxLane - minLane));
         Gizmos.matrix = prev;
     }
 }

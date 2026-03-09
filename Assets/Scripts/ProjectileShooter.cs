@@ -59,9 +59,13 @@ public class ProjectileShooter : NetworkBehaviour
         if (Mouse.current == null) return;
 
         bool firePressed  = Mouse.current.leftButton.wasPressedThisFrame
-                         || (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame);
+                         || (Keyboard.current != null && (GameSettings.UseWasd
+                             ? Keyboard.current.spaceKey.wasPressedThisFrame
+                             : Keyboard.current.qKey.wasPressedThisFrame));
         bool fireReleased = Mouse.current.leftButton.wasReleasedThisFrame
-                         || (Keyboard.current != null && Keyboard.current.spaceKey.wasReleasedThisFrame);
+                         || (Keyboard.current != null && (GameSettings.UseWasd
+                             ? Keyboard.current.spaceKey.wasReleasedThisFrame
+                             : Keyboard.current.qKey.wasReleasedThisFrame));
 
         if (firePressed && Time.time >= _nextFireTime && _attackCoroutine == null)
             _charging = true;
@@ -179,10 +183,14 @@ public class ProjectileShooter : NetworkBehaviour
     private bool HasMovementInput()
     {
         if (Keyboard.current == null) return false;
-        return Keyboard.current.wKey.wasPressedThisFrame ||
-               Keyboard.current.sKey.wasPressedThisFrame ||
-               Keyboard.current.aKey.wasPressedThisFrame ||
-               Keyboard.current.dKey.wasPressedThisFrame;
+        if (GameSettings.UseWasd)
+            return Keyboard.current.wKey.wasPressedThisFrame ||
+                   Keyboard.current.sKey.wasPressedThisFrame ||
+                   Keyboard.current.aKey.wasPressedThisFrame ||
+                   Keyboard.current.dKey.wasPressedThisFrame;
+        // P&C mode: S (stop) or right-click (new move order) cancels the cast
+        return Keyboard.current.sKey.wasPressedThisFrame ||
+               (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame);
     }
 
     private void UpdateRingPosition()
