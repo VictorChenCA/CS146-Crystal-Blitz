@@ -143,6 +143,10 @@ public class GameManager : MonoBehaviour
 
         var nm = NetworkManager.Singleton;
 
+        // Cursor always visible (used for projectile aiming and P&C movement)
+        Cursor.visible   = true;
+        Cursor.lockState = CursorLockMode.None;
+
         // NetworkManager gone → back to main menu
         if ((_state == UIState.InGame || _state == UIState.Settings) && nm == null)
             _state = UIState.MainMenu;
@@ -427,10 +431,16 @@ public class GameManager : MonoBehaviour
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("WASD", _useWasd ? _segActiveStyle : _segInactiveStyle,
                              GUILayout.Width(segW * 0.5f), GUILayout.Height(segH)))
+        {
             _useWasd = true;
+            GameSettings.UseWasd = true;
+        }
         if (GUILayout.Button("Point & Click", !_useWasd ? _segActiveStyle : _segInactiveStyle,
                              GUILayout.Width(segW * 0.5f), GUILayout.Height(segH)))
+        {
             _useWasd = false;
+            GameSettings.UseWasd = false;
+        }
         GUILayout.FlexibleSpace();
         GUILayout.EndHorizontal();
 
