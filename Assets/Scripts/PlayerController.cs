@@ -20,7 +20,11 @@ public class PlayerController : NetworkBehaviour
     // ── Movement lock (used by ProjectileShooter / AutoAttacker) ─────────────
     private float _movementLockUntil;
 
-    public void LockMovement(float duration)  => _movementLockUntil = Time.time + duration;
+    public void LockMovement(float duration)
+    {
+        _movementLockUntil = Time.time + duration;
+        _agent?.ResetPath();
+    }
     public void CancelMovementLock()          => _movementLockUntil = -1f;
 
     // ── NavMesh ───────────────────────────────────────────────────────────────

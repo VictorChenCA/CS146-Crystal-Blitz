@@ -656,6 +656,14 @@ public class GameManager : MonoBehaviour
                       shooter.CooldownRemaining.ToString("0.0"), _levelStyle);
         }
 
+        // Keybind label — bottom-left quarter of ability 1 icon
+        string keybind1 = GameSettings.UseWasd ? "Space" : "Q";
+        _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
+        _levelStyle.alignment = TextAnchor.LowerLeft;
+        GUI.Label(new Rect(abX + 3f * s, colTop, abilitySize * 0.5f, abilitySize - 3f * s),
+                  keybind1, _levelStyle);
+        _levelStyle.alignment = TextAnchor.UpperCenter;
+
         // ── Ability 2 — placeholder ───────────────────────────────────────
         DrawRect(abX + abilitySize + abilityGap, colTop, abilitySize, abilitySize,
                  new Color(0.12f, 0.12f, 0.12f, 0.92f));
