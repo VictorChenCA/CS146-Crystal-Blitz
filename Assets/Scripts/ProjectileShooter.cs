@@ -63,7 +63,7 @@ public class ProjectileShooter : NetworkBehaviour
         bool fireReleased = Mouse.current.leftButton.wasReleasedThisFrame
                          || (Keyboard.current != null && Keyboard.current.spaceKey.wasReleasedThisFrame);
 
-        if (firePressed && Time.time >= _nextFireTime)
+        if (firePressed && Time.time >= _nextFireTime && _attackCoroutine == null)
             _charging = true;
 
         if (_charging)
