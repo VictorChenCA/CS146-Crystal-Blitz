@@ -49,6 +49,16 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     // Shared screen-space canvas for all health bars (created once).
     private static Canvas _hudCanvas;
 
+    // ── Regen (server-only) ───────────────────────────────────────────────────
+    [SerializeField] private float passiveRegenPerSecond = 2f;
+    [SerializeField] private float spawnRegenPerTick     = 10f;
+    [SerializeField] private float spawnRegenTickRate    = 4f;   // ticks per second
+
+    private float     _passiveRegenAccum;
+    private float     _spawnRegenTimer;
+    private Transform _cachedSpawnTransform;
+    private int       _cachedSpawnTeam = -99;
+
     // ------------------------------------------------------------------ lifecycle
 
     public override void OnNetworkSpawn()
@@ -86,6 +96,62 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             AnnounceKillRpc(killerClientId, OwnerClientId);
             StartCoroutine(DespawnAndRespawn(OwnerClientId));
         }
+    }
+
+    // ── Regen update (server-only) ────────────────────────────────────────────
+
+    private void Update()
+    {
+        if (!IsServer || _isDead || Health.Value >= maxHealth) return;
+
+        // Passive: 2 HP/s — accumulated locally, written to NetworkVariable in
+        // whole-HP chunks to avoid sending an update every single frame.
+        _passiveRegenAccum += passiveRegenPerSecond * Time.deltaTime;
+        if (_passiveRegenAccum >= 1f)
+        {
+            float toAdd = Mathf.Floor(_passiveRegenAccum);
+            _passiveRegenAccum -= toAdd;
+            Health.Value = Mathf.Min(maxHealth, Health.Value + toAdd);
+        }
+
+        // Spawn regen: 10 HP, 4 times per second, only when inside team spawn
+        if (IsNearTeamSpawn())
+        {
+            _spawnRegenTimer += Time.deltaTime;
+            float tickInterval = 1f / spawnRegenTickRate;
+            while (_spawnRegenTimer >= tickInterval)
+            {
+                _spawnRegenTimer -= tickInterval;
+                Health.Value      = Mathf.Min(maxHealth, Health.Value + spawnRegenPerTick);
+            }
+        }
+        else
+        {
+            _spawnRegenTimer = 0f;
+        }
+    }
+
+    private bool IsNearTeamSpawn()
+    {
+        var pc = GetComponent<PlayerController>();
+        if (pc == null) return false;
+        int team = pc.TeamIndex.Value;
+        if (team < 0) return false;
+
+        if (_cachedSpawnTeam != team || _cachedSpawnTransform == null)
+        {
+            _cachedSpawnTeam = team;
+            string spawnName = team == 0 ? "Blue Spawn" : "Red Spawn";
+            var go = GameObject.Find(spawnName);
+            _cachedSpawnTransform = go != null ? go.transform : null;
+        }
+
+        if (_cachedSpawnTransform == null) return false;
+
+        Vector3 spawnXZ  = new Vector3(_cachedSpawnTransform.position.x, 0f, _cachedSpawnTransform.position.z);
+        Vector3 playerXZ = new Vector3(transform.position.x, 0f, transform.position.z);
+        float   radius   = _cachedSpawnTransform.lossyScale.x * 0.5f;
+        return Vector3.Distance(playerXZ, spawnXZ) <= radius;
     }
 
     [Rpc(SendTo.ClientsAndHost)]

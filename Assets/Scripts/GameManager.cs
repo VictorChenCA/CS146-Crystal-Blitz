@@ -660,9 +660,10 @@ public class GameManager : MonoBehaviour
         var localObj = nm?.LocalClient?.PlayerObject;
         if (localObj == null) return;
 
-        var health  = localObj.GetComponent<PlayerHealth>();
-        var shooter = localObj.GetComponent<ProjectileShooter>();
-        var pc      = localObj.GetComponent<PlayerController>();
+        var health      = localObj.GetComponent<PlayerHealth>();
+        var shooter     = localObj.GetComponent<ProjectileShooter>();
+        var tripleShot  = localObj.GetComponent<TripleShotAbility>();
+        var pc          = localObj.GetComponent<PlayerController>();
 
         // ── Layout constants (scaled) ─────────────────────────────────────
         float s            = _uiScale;
@@ -676,8 +677,8 @@ public class GameManager : MonoBehaviour
         float circleColGap = 8f   * s;
 
         float colH   = abilitySize + barGap + barH + barGap + barH;  // 106
-        float colW   = abilitySize * 2f + abilityGap;                 // 142
-        float totalW = circleD + circleColGap + colW;                  // 240
+        float colW   = abilitySize * 3f + abilityGap * 2f;            // 3 abilities
+        float totalW = circleD + circleColGap + colW;
 
         float sw        = Screen.width;
         float sh        = Screen.height;
@@ -746,6 +747,28 @@ public class GameManager : MonoBehaviour
         // ── Ability 2 — placeholder ───────────────────────────────────────
         DrawRect(abX + abilitySize + abilityGap, colTop, abilitySize, abilitySize,
                  new Color(0.12f, 0.12f, 0.12f, 0.92f));
+
+        // ── Ability 3 — triple shot ───────────────────────────────────────
+        float ab3X  = abX + (abilitySize + abilityGap) * 2f;
+        float tsCD  = tripleShot != null ? tripleShot.CooldownFraction  : 0f;
+        float tsCDR = tripleShot != null ? tripleShot.CooldownRemaining : 0f;
+        DrawRect(ab3X, colTop, abilitySize, abilitySize, new Color(0.12f, 0.12f, 0.12f, 0.92f));
+
+        if (tsCD > 0.01f)
+        {
+            DrawRect(ab3X, colTop + abilitySize * (1f - tsCD), abilitySize, tsCD * abilitySize,
+                     new Color(0f, 0f, 0f, 0.5f));
+            _levelStyle.fontSize = Mathf.RoundToInt(16f * s);
+            GUI.Label(new Rect(ab3X, colTop, abilitySize, abilitySize),
+                      tsCDR.ToString("0.0"), _levelStyle);
+        }
+
+        // Keybind label for ability 3
+        _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
+        _levelStyle.alignment = TextAnchor.LowerLeft;
+        GUI.Label(new Rect(ab3X + 3f * s, colTop, abilitySize - 3f * s, abilitySize - 3f * s),
+                  "E", _levelStyle);
+        _levelStyle.alignment = TextAnchor.UpperCenter;
 
         // ── Health bar ────────────────────────────────────────────────────
         float barY = colTop + abilitySize + barGap;
