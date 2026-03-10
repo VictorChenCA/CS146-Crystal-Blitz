@@ -13,7 +13,11 @@ public class ProjectileController : NetworkBehaviour
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Server);
 
-    private bool _initialized;
+    private NetworkVariable<bool> _netActive =
+        new NetworkVariable<bool>(false,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+
     private ulong _shooterClientId;
     private float _damage;
 
@@ -25,20 +29,16 @@ public class ProjectileController : NetworkBehaviour
         endPosition.y    = transform.position.y;  // lock to spawn height — XZ travel only
         _netEndPos.Value = endPosition;
         _netSpeed.Value  = speed;
+        _netActive.Value = true;
         _shooterClientId = shooterClientId;
         _damage          = damage;
-        _initialized     = true;
     }
 
-    public override void OnNetworkSpawn()
-    {
-        if (!IsServer)
-            _initialized = true;
-    }
+    public override void OnNetworkSpawn() { }
 
     private void Update()
     {
-        if (!_initialized) return;
+        if (!_netActive.Value) return;
 
         float step = _netSpeed.Value * Time.deltaTime;
         transform.position = Vector3.MoveTowards(transform.position, _netEndPos.Value, step);
