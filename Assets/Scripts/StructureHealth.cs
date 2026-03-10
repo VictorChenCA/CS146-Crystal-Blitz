@@ -99,7 +99,11 @@ public class StructureHealth : NetworkBehaviour, IDamageable
         if (col != null) col.enabled = alive;
 
         for (int i = 0; i < transform.childCount; i++)
-            transform.GetChild(i).gameObject.SetActive(alive);
+        {
+            Transform child = transform.GetChild(i);
+            Vector3 euler = child.eulerAngles;
+            child.eulerAngles = new Vector3(alive ? 0f : 180f, euler.y, euler.z);
+        }
     }
 
     // ── Health bar (screen-space OnGUI) ──────────────────────────────────────
