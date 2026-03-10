@@ -273,7 +273,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AutoAttacker
   ShowTopMostFoldoutHeaderGroup: 1
-  autoAttackRange: 9
+  autoAttackRange: 10
   autoAttackCooldown: 1
   windUpDuration: 0.25
   projectileSpeed: 18

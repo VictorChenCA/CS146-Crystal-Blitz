@@ -136,6 +136,14 @@ public class AutoAttacker : NetworkBehaviour
                 break;
             }
 
+            // Enemy minion — in-game only
+            var mh = hit.collider.GetComponentInParent<MinionHealth>();
+            if (mh != null && mh.TeamIndexNet.Value != myTeam && mh.Health.Value > 0f)
+            {
+                _hoveredEnemy = mh.transform;
+                break;
+            }
+
             // Enemy structure (tower / crystal) — in-game only
             var sh = hit.collider.GetComponentInParent<StructureHealth>();
             if (sh != null && sh.TeamIndex != myTeam && sh.IsAlive.Value)
@@ -464,6 +472,18 @@ public class AutoAttacker : NetworkBehaviour
             if (dist <= radius && dist < nearestDist)
             {
                 nearest = dummy.transform;
+                nearestDist = dist;
+            }
+        }
+
+        // Enemy minions
+        foreach (var mh in FindObjectsByType<MinionHealth>(FindObjectsSortMode.None))
+        {
+            if (mh.TeamIndexNet.Value == myTeam || mh.Health.Value <= 0f) continue;
+            float dist = Vector3.Distance(worldPos, mh.transform.position);
+            if (dist <= radius && dist < nearestDist)
+            {
+                nearest = mh.transform;
                 nearestDist = dist;
             }
         }

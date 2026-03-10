@@ -45,10 +45,16 @@ public class MinionController : NetworkBehaviour
             _agent.autoBraking      = false;
             _agent.updateRotation   = false;
             _agent.stoppingDistance = settings.navStoppingDistance;
+            Debug.Log($"[Minion T{teamIndex}] Agent found. isOnNavMesh={_agent.isOnNavMesh} speed={_agent.speed}");
+        }
+        else
+        {
+            Debug.LogWarning($"[Minion T{teamIndex}] No NavMeshAgent component found on prefab!");
         }
 
         _position.Value = transform.position;
         CacheEnemyCrystal();
+        Debug.Log($"[Minion T{teamIndex}] Initialized at {transform.position}. Crystal={_enemyCrystal?.name ?? "NOT FOUND"}");
     }
 
     // ── Network spawn ─────────────────────────────────────────────────────────
@@ -90,6 +96,7 @@ public class MinionController : NetworkBehaviour
         {
             _nextTargetUpdate = Time.time + _settings.targetUpdateInterval;
             FindBestTarget();
+            Debug.Log($"[Minion T{TeamIndex}] target={_targetTransform?.name ?? "null"} crystal={_enemyCrystal?.name ?? "null"} onNavMesh={_agent?.isOnNavMesh} hasPath={_agent?.hasPath}");
         }
 
         if (_targetTransform != null)
@@ -102,7 +109,9 @@ public class MinionController : NetworkBehaviour
             }
             else
             {
-                _agent.SetDestination(_targetTransform.position);
+                Vector3 dest = NearestNavMeshPoint(_targetTransform.position);
+                bool ok = _agent.SetDestination(dest);
+                if (!ok) Debug.LogWarning($"[Minion T{TeamIndex}] SetDestination failed for target {_targetTransform.name}");
             }
         }
         else
@@ -201,8 +210,21 @@ public class MinionController : NetworkBehaviour
     private void AdvanceLane()
     {
         if (_enemyCrystal == null) CacheEnemyCrystal();
-        if (_enemyCrystal == null) return;
-        _agent.SetDestination(_enemyCrystal.position);
+        if (_enemyCrystal == null)
+        {
+            Debug.LogWarning($"[Minion T{TeamIndex}] No enemy crystal found — cannot advance lane.");
+            return;
+        }
+        Vector3 dest = NearestNavMeshPoint(_enemyCrystal.position);
+        bool ok = _agent.SetDestination(dest);
+        if (!ok) Debug.LogWarning($"[Minion T{TeamIndex}] SetDestination failed for crystal {_enemyCrystal.name}");
+    }
+
+    private static Vector3 NearestNavMeshPoint(Vector3 pos)
+    {
+        if (NavMesh.SamplePosition(pos, out NavMeshHit hit, 5f, NavMesh.AllAreas))
+            return hit.position;
+        return pos;
     }
 
     private void CacheEnemyCrystal()

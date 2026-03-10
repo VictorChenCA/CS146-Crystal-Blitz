@@ -45,12 +45,12 @@ public class TowerAttack : NetworkBehaviour
         if (_myStructure != null && !_myStructure.IsAlive.Value) return;
         if (Time.time < _nextAttackTime) return;
 
-        var target = FindNearestEnemy();
+        IDamageable target = FindNearestEnemy();
         if (target == null) return;
 
         _nextAttackTime = Time.time + cooldown;
         target.TakeDamage(damage, ulong.MaxValue);
-        TowerAttackVfxRpc(transform.position + Vector3.up, target.transform.position + Vector3.up);
+        TowerAttackVfxRpc(transform.position + Vector3.up, ((Component)target).transform.position + Vector3.up);
     }
 
     [Rpc(SendTo.ClientsAndHost)]
@@ -81,11 +81,12 @@ public class TowerAttack : NetworkBehaviour
         Gizmos.DrawWireSphere(transform.position, range);
     }
 
-    private PlayerHealth FindNearestEnemy()
+    private IDamageable FindNearestEnemy()
     {
-        PlayerHealth nearest    = null;
-        float        nearestDist = range + 1f;
+        IDamageable best     = null;
+        float       bestDist = range + 1f;
 
+        // Players
         foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
         {
             var playerObj = client.PlayerObject;
@@ -98,12 +99,19 @@ public class TowerAttack : NetworkBehaviour
             if (ph == null || ph.IsDead) continue;
 
             float dist = Vector3.Distance(transform.position, playerObj.transform.position);
-            if (dist <= range && dist < nearestDist)
-            {
-                nearestDist = dist;
-                nearest     = ph;
-            }
+            if (dist <= range && dist < bestDist) { bestDist = dist; best = ph; }
         }
-        return nearest;
+
+        // Minions
+        foreach (var mh in FindObjectsByType<MinionHealth>(FindObjectsSortMode.None))
+        {
+            if (mh.Health.Value <= 0f) continue;
+            if (mh.TeamIndexNet.Value == teamIndex) continue;
+
+            float dist = Vector3.Distance(transform.position, mh.transform.position);
+            if (dist <= range && dist < bestDist) { bestDist = dist; best = mh; }
+        }
+
+        return best;
     }
 }

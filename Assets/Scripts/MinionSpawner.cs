@@ -26,11 +26,17 @@ public class MinionSpawner : NetworkBehaviour
             return;
         }
 
-        GamePhaseManager.Instance.Phase.OnValueChanged += OnPhaseChanged;
-
-        // Handle mid-game reconnect / late host start
-        if (GamePhaseManager.Instance.Phase.Value == GamePhaseManager.GamePhase.InGame)
-            StartSpawning();
+        if (GamePhaseManager.Instance != null)
+        {
+            GamePhaseManager.Instance.Phase.OnValueChanged += OnPhaseChanged;
+            if (GamePhaseManager.Instance.Phase.Value == GamePhaseManager.GamePhase.InGame)
+                StartSpawning();
+        }
+        else
+        {
+            // GamePhaseManager spawned after us — poll until it's ready
+            StartCoroutine(WaitForPhaseManager());
+        }
     }
 
     public override void OnNetworkDespawn()
@@ -38,6 +44,16 @@ public class MinionSpawner : NetworkBehaviour
         if (!IsServer) return;
         if (GamePhaseManager.Instance != null)
             GamePhaseManager.Instance.Phase.OnValueChanged -= OnPhaseChanged;
+    }
+
+    private IEnumerator WaitForPhaseManager()
+    {
+        while (GamePhaseManager.Instance == null)
+            yield return null;
+
+        GamePhaseManager.Instance.Phase.OnValueChanged += OnPhaseChanged;
+        if (GamePhaseManager.Instance.Phase.Value == GamePhaseManager.GamePhase.InGame)
+            StartSpawning();
     }
 
     // ── Phase handling ────────────────────────────────────────────────────────
