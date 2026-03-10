@@ -270,7 +270,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   autoAttackRange: 12
   autoAttackCooldown: 1.5
-  windUpDuration: 0.3
+  windUpDuration: 0.2
   projectileSpeed: 18
   damage: 30
   autoAttackProjectilePrefab: {fileID: 8423999069295360159, guid: b1004cecac4544e1886d85389e4a8b7f, type: 3}
@@ -284,7 +284,7 @@ NavMeshAgent:
   m_Enabled: 1
   m_AgentTypeID: 0
   m_Radius: 0.5
-  m_Speed: 8
+  m_Speed: 7
   m_Acceleration: 99999
   avoidancePriority: 50
   m_AngularSpeed: 999
@@ -292,10 +292,10 @@ NavMeshAgent:
   m_AutoTraverseOffMeshLink: 1
   m_AutoBraking: 0
   m_AutoRepath: 1
-  m_Height: 2
+  m_Height: 1
   m_BaseOffset: 1
   m_WalkableMask: 4294967295
-  m_ObstacleAvoidanceType: 4
+  m_ObstacleAvoidanceType: 1
 --- !u!1 &8598427067344695647
 GameObject:
   m_ObjectHideFlags: 0

@@ -123,6 +123,7 @@ public class ProjectileShooter : NetworkBehaviour
     {
         var pc = GetComponent<PlayerController>();
         pc?.LockMovement(castDelay + animationDelay);
+        GetComponent<AutoAttacker>()?.CancelAutoAttack();
 
         // Compute offset start position toward target
         Vector3 castDir   = targetPos - firePoint.position;

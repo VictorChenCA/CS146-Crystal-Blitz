@@ -26,6 +26,7 @@ public class AutoAttacker : NetworkBehaviour
 
     private PlayerController _pc;
     private PlayerHealth     _health;
+    private Renderer         _renderer;
     private Camera           _mainCamera;
     private readonly Plane   _groundPlane = new Plane(Vector3.up, Vector3.zero);
 
@@ -33,6 +34,11 @@ public class AutoAttacker : NetworkBehaviour
     private NetworkObject  _targetNetObj;
     private float          _nextAttackTime;
     private Coroutine      _attackCoroutine;
+
+    // ── Charge tint (driven by Update, independent of coroutine) ─────────────
+    private float _tintValue;   // 0..1, current glow intensity
+    private float _tintTarget;  // destination (0 = dark, 1 = bright)
+    private float _tintRate;    // units per second
 
     private Transform _hoveredEnemy;
     private bool      _attackCursorActive;
@@ -58,6 +64,7 @@ public class AutoAttacker : NetworkBehaviour
 
         _pc         = GetComponent<PlayerController>();
         _health     = GetComponent<PlayerHealth>();
+        _renderer   = GetComponent<Renderer>();
         _mainCamera = Camera.main;
 
         BuildCursorTextures();
@@ -85,6 +92,7 @@ public class AutoAttacker : NetworkBehaviour
 
     private void Update()
     {
+        UpdateChargeTint();   // always runs so the fade completes even after cancel/death
         if (_mainCamera == null) return;
         if (Mouse.current == null) return;
         if (_health != null && _health.IsDead) return;
@@ -165,7 +173,7 @@ public class AutoAttacker : NetworkBehaviour
             if (GetCursorWorldPos(out Vector3 worldPos))
             {
                 ShowAttackMoveIndicator(worldPos);
-                Transform enemy = FindNearestEnemyAt(worldPos, 1f);
+                Transform enemy = FindNearestEnemyAt(worldPos, autoAttackRange);
                 if (enemy != null)
                 {
                     var netObj = enemy.GetComponent<NetworkObject>()
@@ -221,6 +229,7 @@ public class AutoAttacker : NetworkBehaviour
         }
         _target       = null;
         _targetNetObj = null;
+        StartTintFadeOut();
         _pc?.StopNavMovement();
         _pc?.CancelMovementLock();
     }
@@ -261,35 +270,39 @@ public class AutoAttacker : NetworkBehaviour
 
             _pc?.StopNavMovement();
 
+            // Pre-wind-up cooldown wait (harmless no-op on the first attack)
             while (Time.time < _nextAttackTime)
             {
                 if (_target == null || !_targetNetObj.IsSpawned) yield break;
+                if (GameSettings.UseWasd && HasWasdInput()) { CancelAutoAttack(); yield break; }
                 yield return null;
             }
 
-            // Wind-up animation
+            // Wind-up: tint builds 0→1 over windUpDuration
+            _tintTarget = 1f;
+            _tintRate   = 1f / windUpDuration;
             _pc?.LockMovement(windUpDuration);
-            GameObject preview = CreateWindUpSphere();
 
             float windEnd = Time.time + windUpDuration;
             while (Time.time < windEnd)
             {
                 if (_target == null || !_targetNetObj.IsSpawned)
                 {
-                    Destroy(preview);
                     _pc?.CancelMovementLock();
+                    StartTintFadeOut();
                     _attackCoroutine = null;
                     yield break;
                 }
 
-                float t = 1f - (windEnd - Time.time) / windUpDuration;
-                preview.transform.localScale = Vector3.Lerp(Vector3.zero, Vector3.one * 0.25f, t);
-                preview.GetComponent<Renderer>().material.color =
-                    Color.Lerp(Color.white, new Color(1f, 0.5f, 0f), Mathf.Pow(t, 2f));
+                if (GameSettings.UseWasd && HasWasdInput())
+                {
+                    _pc?.CancelMovementLock();
+                    CancelAutoAttack();   // includes StartTintFadeOut
+                    yield break;
+                }
+
                 yield return null;
             }
-
-            Destroy(preview);
 
             if (_target == null || !_targetNetObj.IsSpawned)
             {
@@ -297,13 +310,57 @@ public class AutoAttacker : NetworkBehaviour
                 yield break;
             }
 
+            // Fire — fade out over (cooldown - windUpDuration), then charge for windUpDuration
+            // so the charge phase flows seamlessly into the wind-up at the same rate.
             FireAutoAttackServerRpc(_targetNetObj.NetworkObjectId, damage);
             _nextAttackTime = Time.time + autoAttackCooldown;
 
-            yield return new WaitForSeconds(0.15f);
+            float fadeDuration    = autoAttackCooldown - windUpDuration;
+            _tintTarget           = 0f;
+            _tintRate             = fadeDuration > 0f ? 1f / fadeDuration : float.MaxValue;
+            float chargeStartTime = Time.time + fadeDuration;
+            bool  chargeStarted   = false;
+
+            while (Time.time < _nextAttackTime)
+            {
+                if (_target == null || !_targetNetObj.IsSpawned) yield break;
+                if (GameSettings.UseWasd && HasWasdInput()) { CancelAutoAttack(); yield break; }
+
+                // Switch from fade-out to charge windUpDuration before cooldown ends
+                if (!chargeStarted && Time.time >= chargeStartTime)
+                {
+                    chargeStarted = true;
+                    _tintTarget   = 1f;
+                    _tintRate     = 1f / windUpDuration;
+                }
+
+                yield return null;
+            }
         }
 
         _attackCoroutine = null;
+    }
+
+    // ── Charge tint helpers ───────────────────────────────────────────────────
+
+    /// <summary>Called from Update every frame. Smoothly moves _tintValue and applies to renderer.</summary>
+    private void UpdateChargeTint()
+    {
+        if (_tintRate <= 0f) return;
+        _tintValue = Mathf.MoveTowards(_tintValue, _tintTarget, _tintRate * Time.deltaTime);
+        if (_renderer == null || _pc == null) return;
+        Color baseColor = _pc.PlayerColor.Value;
+        var block = new MaterialPropertyBlock();
+        _renderer.GetPropertyBlock(block);
+        block.SetColor("_BaseColor", Color.Lerp(baseColor, Color.white, _tintValue * 0.5f));
+        _renderer.SetPropertyBlock(block);
+    }
+
+    /// <summary>Begins fading the glow out over half the attack cooldown.</summary>
+    private void StartTintFadeOut()
+    {
+        _tintTarget = 0f;
+        _tintRate   = 1f / (autoAttackCooldown * 0.5f);
     }
 
     private bool HasWasdInput()
@@ -315,16 +372,6 @@ public class AutoAttacker : NetworkBehaviour
                Keyboard.current.dKey.isPressed;
     }
 
-    // ── Wind-up visual ────────────────────────────────────────────────────────
-
-    private GameObject CreateWindUpSphere()
-    {
-        var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        Destroy(go.GetComponent<Collider>());
-        go.transform.position   = transform.position + Vector3.up * 0.5f;
-        go.transform.localScale = Vector3.zero;
-        return go;
-    }
 
     // ── Server RPC ────────────────────────────────────────────────────────────
 

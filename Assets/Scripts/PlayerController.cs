@@ -139,6 +139,14 @@ public class PlayerController : NetworkBehaviour
             _agent.updateRotation   = false;
         }
 
+        // Apply server-assigned spawn position. OnPositionChanged skips the owner,
+        // so a joining client would otherwise stay at the prefab's default origin.
+        if (!IsServer)
+        {
+            transform.position = Position.Value;
+            _agent?.Warp(Position.Value);
+        }
+
         _autoAttacker = GetComponent<AutoAttacker>();
         CreateClickIndicator();
 
@@ -320,6 +328,9 @@ public class PlayerController : NetworkBehaviour
 
         // Let AutoAttacker intercept for enemy targeting (works in both modes)
         if (_autoAttacker != null && _autoAttacker.TryHandleRightClick(pressed, isShift)) return;
+
+        // Shift+right-click is fully owned by AutoAttacker — never fall through to movement
+        if (isShift) return;
 
         // Ground movement — P&C mode only
         if (GameSettings.UseWasd) return;
