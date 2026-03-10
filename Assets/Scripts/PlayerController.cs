@@ -78,6 +78,12 @@ public class PlayerController : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    public NetworkVariable<int> CharacterIndex = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     public override void OnNetworkSpawn()
@@ -89,10 +95,22 @@ public class PlayerController : NetworkBehaviour
 
         if (IsServer)
         {
-            PlayerColor.Value  = Random.ColorHSV(0f, 1f, 0.7f, 1f, 0.8f, 1f);
-            Vector3 spawnPos   = RandomSpawnForTeam(TeamIndex.Value, groundY);
+            PlayerColor.Value = Color.white;  // Unassigned color; LobbyZone sets it later
+            bool isLobby = GamePhaseManager.Instance == null ||
+                           GamePhaseManager.Instance.Phase.Value == GamePhaseManager.GamePhase.Lobby;
+            Vector3 spawnPos;
+            if (isLobby)
+            {
+                Vector2 rand = Random.insideUnitCircle * 3f;
+                spawnPos = new Vector3(rand.x, groundY, 100f + rand.y);
+            }
+            else
+            {
+                spawnPos = RandomSpawnForTeam(TeamIndex.Value, groundY);
+            }
             transform.position = spawnPos;
             Position.Value     = spawnPos;
+            _agent?.Warp(spawnPos);
         }
 
         ApplyPlayerColor(PlayerColor.Value);
@@ -164,12 +182,49 @@ public class PlayerController : NetworkBehaviour
         UpdateClickIndicator();
     }
 
-    // ── Team switch ───────────────────────────────────────────────────────────
+    // ── Server-side team / character / teleport API ───────────────────────────
+
+    /// <summary>Sets team and adjusts color. team=-1 resets to white (unassigned).</summary>
+    public void SetTeamServerSide(int team)
+    {
+        if (!IsServer) return;
+        TeamIndex.Value = Mathf.Max(-1, team);
+        PlayerColor.Value = team == 0 ? new Color(0.2f, 0.5f, 1f)
+                          : team == 1 ? new Color(1f, 0.25f, 0.25f)
+                          : Color.white;
+    }
+
+    public void SetCharacterIndexServerSide(int index)
+    {
+        if (!IsServer) return;
+        CharacterIndex.Value = index;
+    }
+
+    /// <summary>Server: teleport this player's transform and warp their NavMeshAgent.</summary>
+    public void TeleportTo(Vector3 pos)
+    {
+        if (!IsServer) return;
+        transform.position = pos;
+        Position.Value     = pos;
+        _agent?.Warp(pos);
+        TeleportOwnerRpc(pos);
+    }
+
+    [Rpc(SendTo.Owner)]
+    private void TeleportOwnerRpc(Vector3 pos)
+    {
+        transform.position = pos;
+        _agent?.Warp(pos);
+    }
+
+    // ── Team switch (editor only) ─────────────────────────────────────────────
 
     private void HandleTeamSwitch()
     {
+#if UNITY_EDITOR
         if (Keyboard.current.oKey.wasPressedThisFrame) ChangeTeamServerRpc(0);
         if (Keyboard.current.pKey.wasPressedThisFrame) ChangeTeamServerRpc(1);
+#endif
     }
 
     [Rpc(SendTo.Server)]
@@ -196,8 +251,10 @@ public class PlayerController : NetworkBehaviour
 
         _agent?.ResetPath();
 
-        Vector3 move   = (LaneForward * fwdInput + LaneRight * rightInput).normalized;
-        Vector3 newPos = ClampToLane(transform.position + move * moveSpeed * Time.deltaTime);
+        Vector3 move      = (LaneForward * fwdInput + LaneRight * rightInput).normalized;
+        Vector3 candidate = transform.position + move * moveSpeed * Time.deltaTime;
+        bool    inGame    = GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.InGame;
+        Vector3 newPos    = inGame ? ClampToLane(candidate) : candidate;
 
         // Preserve the agent's natural Y so it doesn't fight the NavMesh surface
         if (_agent != null && _agent.enabled)
@@ -263,13 +320,14 @@ public class PlayerController : NetworkBehaviour
 
     // ── Public NavMesh API (used by AutoAttacker) ─────────────────────────────
 
-    /// <summary>Player-commanded move: clamps to lane and shows click indicator.</summary>
+    /// <summary>Player-commanded move: clamps to lane (InGame only) and shows click indicator.</summary>
     public void SetNavDestination(Vector3 worldPos)
     {
         if (_agent == null || !_agent.enabled) return;
         if (Time.time < _movementLockUntil) return;
 
-        Vector3 dest = ClampToLane(worldPos);
+        bool inGame = GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.InGame;
+        Vector3 dest = inGame ? ClampToLane(worldPos) : worldPos;
         _agent.SetDestination(dest);
         ShowClickIndicator(dest);
     }

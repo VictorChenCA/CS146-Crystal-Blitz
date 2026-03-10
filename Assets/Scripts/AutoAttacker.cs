@@ -93,6 +93,19 @@ public class AutoAttacker : NetworkBehaviour
 
     private void UpdateHoverDetection()
     {
+        // No targeting during lobby or countdown
+        if (GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Lobby ||
+            GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Countdown)
+        {
+            if (_hoveredEnemy != null)
+            {
+                _hoveredEnemy       = null;
+                _attackCursorActive = false;
+                Cursor.SetCursor(_cursorDefault, new Vector2(8f, 8f), CursorMode.Auto);
+            }
+            return;
+        }
+
         Vector2 mousePos = Mouse.current.position.ReadValue();
         Ray     ray      = _mainCamera.ScreenPointToRay(new Vector3(mousePos.x, mousePos.y, 0f));
 
@@ -129,6 +142,14 @@ public class AutoAttacker : NetworkBehaviour
     /// </summary>
     public bool TryHandleRightClick(bool isNewPress, bool isShift = false)
     {
+        // No attack targeting during lobby or countdown
+        if (GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Lobby ||
+            GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Countdown)
+        {
+            _hoveredEnemy = null;
+            return false;
+        }
+
         // ── Attack move: Shift + right-click in P&C mode ──────────────────────
         if (isShift && isNewPress && !GameSettings.UseWasd)
         {

@@ -54,7 +54,31 @@ public class ProjectileController : NetworkBehaviour
 
             if (Vector3.Distance(transform.position, playerObj.transform.position) < hitRadius)
             {
-                playerObj.GetComponent<PlayerHealth>()?.TakeDamage(_damage, _shooterClientId);
+                var dmg = playerObj.GetComponent<IDamageable>();
+                if (dmg != null && !dmg.IsImmuneTo(_shooterClientId))
+                {
+                    dmg.TakeDamage(_damage, _shooterClientId);
+                    NetworkObject.Despawn(true);
+                    return;
+                }
+            }
+        }
+
+        // Check for training dummy
+        var dummy = TrainingDummy.Instance;
+        if (dummy != null && Vector3.Distance(transform.position, dummy.transform.position) < hitRadius)
+        {
+            dummy.TakeDamage(_damage, _shooterClientId);
+            NetworkObject.Despawn(true);
+            return;
+        }
+
+        // Check for structures (towers + crystals)
+        foreach (var s in FindObjectsByType<StructureHealth>(FindObjectsSortMode.None))
+        {
+            if (Vector3.Distance(transform.position, s.transform.position) < hitRadius + 1f)
+            {
+                s.TakeDamage(_damage, _shooterClientId);
                 NetworkObject.Despawn(true);
                 return;
             }

@@ -44,7 +44,8 @@ public class HomingProjectileController : NetworkBehaviour
         // Hit
         if (Vector3.Distance(transform.position, targetPos) < hitRadius)
         {
-            _target.TakeDamage(_damage, _shooterClientId);
+            if (!_target.IsImmuneTo(_shooterClientId))
+                _target.TakeDamage(_damage, _shooterClientId);
             NetworkObject.Despawn(true);
         }
     }

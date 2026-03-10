@@ -19,7 +19,24 @@ public class CameraFollow : MonoBehaviour
     // Rotation of the pull ellipse around the Y axis (degrees).
     [SerializeField] private float originRotation = 0f;
 
+    public static CameraFollow Instance { get; private set; }
+
     private Transform _target;
+
+    // ── Temporary target override (for win-sequence crystal cam pan) ──────────
+    private Vector3? _tempTarget;
+    private float    _tempTargetExpiry;
+
+    public void SetTemporaryTarget(Vector3 worldPos, float duration)
+    {
+        _tempTarget       = worldPos;
+        _tempTargetExpiry = Time.time + duration;
+    }
+
+    private void Awake()
+    {
+        Instance = this;
+    }
 
     private void Start()
     {
@@ -45,10 +62,21 @@ public class CameraFollow : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (_target == null) return;
+        Vector3 followPos;
+        if (_tempTarget.HasValue && Time.time < _tempTargetExpiry)
+        {
+            followPos = _tempTarget.Value;
+        }
+        else
+        {
+            _tempTarget = null;
+            if (_target == null) return;
+            followPos = _target.position;
+        }
+
         transform.position = Vector3.Lerp(
             transform.position,
-            DesiredPosition(_target.position),
+            DesiredPosition(followPos),
             smoothSpeed * Time.deltaTime
         );
     }

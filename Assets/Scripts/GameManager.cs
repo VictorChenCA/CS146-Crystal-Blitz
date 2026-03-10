@@ -189,9 +189,77 @@ public class GameManager : MonoBehaviour
         {
             case UIState.MainMenu: DrawMainMenu(); break;
             case UIState.ConnectionScreen: DrawConnectionScreen(); break;
-            case UIState.InGame: DrawInGameHUD(); break;
-            case UIState.Settings: DrawInGameHUD(); DrawSettingsPanel(); break;
+            case UIState.InGame:
+                DrawInGameHUD();
+                DrawPhaseHUD();
+                break;
+            case UIState.Settings:
+                DrawInGameHUD();
+                DrawPhaseHUD();
+                DrawSettingsPanel();
+                break;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Draw: Phase-specific HUD overlays
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void DrawPhaseHUD()
+    {
+        var gpm = GamePhaseManager.Instance;
+        if (gpm == null) return;
+
+        var phase = gpm.Phase.Value;
+
+        switch (phase)
+        {
+            case GamePhaseManager.GamePhase.Lobby:
+                DrawLobbyHUD(gpm);
+                break;
+
+            case GamePhaseManager.GamePhase.Countdown:
+                DrawCountdownHUD(gpm);
+                break;
+
+            case GamePhaseManager.GamePhase.GameOver:
+                DrawGameOverHUD(gpm);
+                break;
+        }
+    }
+
+    private void DrawLobbyHUD(GamePhaseManager gpm)
+    {
+        float sw = Screen.width;
+
+        // Zone legend — top center
+        float w = 500f, h = 64f;
+        float x = (sw - w) * 0.5f;
+        int total = NetworkManager.Singleton != null
+            ? NetworkManager.Singleton.ConnectedClientsList.Count : 1;
+        string msg = $"Walk into a colored zone to pick your team!\n" +
+                     $"{gpm.PlayersReadyCount.Value}/{total} players ready in start zone";
+        GUI.Box(new Rect(x, 10f, w, h), msg, _announcementStyle);
+    }
+
+    private void DrawCountdownHUD(GamePhaseManager gpm)
+    {
+        float sw = Screen.width, sh = Screen.height;
+        float remaining = Mathf.Max(0f, gpm.CountdownEndTime.Value - Time.time);
+        int secs = Mathf.CeilToInt(remaining);
+        float w = 200f, h = 120f;
+        GUI.Box(new Rect((sw - w) * 0.5f, (sh - h) * 0.5f, w, h),
+                secs > 0 ? secs.ToString() : "GO!", _announcementStyle);
+    }
+
+    private void DrawGameOverHUD(GamePhaseManager gpm)
+    {
+        float sw = Screen.width, sh = Screen.height;
+        int winner = gpm.WinningTeam.Value;
+        string teamName = winner == 0 ? "Blue Team" : winner == 1 ? "Red Team" : "Unknown";
+        float w = 500f, h = 100f;
+        GUI.Box(new Rect((sw - w) * 0.5f, sh * 0.3f, w, h),
+                $"{teamName} Wins!\nReturning to lobby...", _announcementStyle);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

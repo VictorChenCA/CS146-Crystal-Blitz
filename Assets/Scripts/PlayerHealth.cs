@@ -4,7 +4,7 @@ using UnityEngine.UI;
 using TMPro;
 using Unity.Netcode;
 
-public class PlayerHealth : NetworkBehaviour
+public class PlayerHealth : NetworkBehaviour, IDamageable
 {
     [SerializeField] private float maxHealth    = 100f;
     [SerializeField] private float respawnDelay = 3f;
@@ -22,6 +22,16 @@ public class PlayerHealth : NetworkBehaviour
     public static event System.Action<string> OnKillAnnouncement;
 
     public float HealthFraction => Mathf.Clamp01(Health.Value / maxHealth);
+
+    // ── IDamageable ──────────────────────────────────────────────────────────
+    public float MaxHealth     => maxHealth;
+    public float CurrentHealth => Health.Value;
+
+    public bool IsImmuneTo(ulong attackerClientId)
+    {
+        return GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Lobby ||
+               GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Countdown;
+    }
 
     public NetworkVariable<float> Health = new NetworkVariable<float>(
         100f,
@@ -63,6 +73,7 @@ public class PlayerHealth : NetworkBehaviour
     public void TakeDamage(float amount, ulong killerClientId = ulong.MaxValue)
     {
         if (!IsServer || _isDead) return;
+        if (IsImmuneTo(killerClientId)) return;
 
         Health.Value = Mathf.Max(0f, Health.Value - amount);
 
