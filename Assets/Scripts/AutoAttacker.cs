@@ -258,10 +258,7 @@ public class AutoAttacker : NetworkBehaviour
 
             if (dist > autoAttackRange)
             {
-                // Chase via PlayerController — P&C mode only
-                if (!GameSettings.UseWasd)
-                    _pc.SetChaseDestination(_target.position);
-
+                _pc.SetChaseDestination(_target.position);
                 yield return null;
                 continue;
             }

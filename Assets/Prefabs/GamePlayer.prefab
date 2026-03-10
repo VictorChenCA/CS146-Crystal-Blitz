@@ -233,7 +233,7 @@ MonoBehaviour:
   firePoint: {fileID: 8689417454509932622}
   projectileSpeed: 30
   maxRange: 20
-  damage: 20
+  damage: 35
   fireCooldown: 1
   castDelay: 0.4
   animationDelay: 0.4
@@ -272,7 +272,7 @@ MonoBehaviour:
   autoAttackCooldown: 1.5
   windUpDuration: 0.2
   projectileSpeed: 18
-  damage: 30
+  damage: 25
   autoAttackProjectilePrefab: {fileID: 8423999069295360159, guid: b1004cecac4544e1886d85389e4a8b7f, type: 3}
 --- !u!195 &-4491582939355880280
 NavMeshAgent:

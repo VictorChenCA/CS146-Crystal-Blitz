@@ -189,9 +189,14 @@ public class PlayerController : NetworkBehaviour
         HandleTeamSwitch();
 
         if (GameSettings.UseWasd)
+        {
             HandleWasdMovement();
+            SyncNavPosition();   // sync AA-chase movement in WASD mode
+        }
         else
+        {
             SyncNavMovement();
+        }
 
         HandleRightClickInput();
         UpdateClickIndicator();
@@ -291,14 +296,21 @@ public class PlayerController : NetworkBehaviour
             _autoAttacker?.CancelAutoAttack();
         }
 
+        SyncNavPosition();
+    }
+
+    /// <summary>
+    /// Syncs NavMeshAgent position to the server when the agent is actively moving.
+    /// Called in both WASD and P&C modes so AA-chase works in WASD mode.
+    /// </summary>
+    private void SyncNavPosition()
+    {
         if (_agent == null || !_agent.enabled) return;
 
-        // Keep agent speed in sync with moveSpeed so both modes are always identical
         _agent.speed = moveSpeed;
 
         if (!_agent.hasPath || _agent.velocity.sqrMagnitude <= 0.01f) return;
 
-        // Throttle: send at most 20 Hz and only when position changed meaningfully
         float now = Time.time;
         Vector3 pos = transform.position;
         if (now - _lastPositionSendTime < PositionSendInterval) return;

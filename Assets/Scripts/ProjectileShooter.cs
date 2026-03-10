@@ -62,14 +62,13 @@ public class ProjectileShooter : NetworkBehaviour
         if (_health == null) _health = GetComponent<PlayerHealth>();
         if (_health != null && _health.IsDead) return;
 
-        bool firePressed  = Mouse.current.leftButton.wasPressedThisFrame
-                         || (Keyboard.current != null && (GameSettings.UseWasd
-                             ? Keyboard.current.spaceKey.wasPressedThisFrame
-                             : Keyboard.current.qKey.wasPressedThisFrame));
-        bool fireReleased = Mouse.current.leftButton.wasReleasedThisFrame
-                         || (Keyboard.current != null && (GameSettings.UseWasd
-                             ? Keyboard.current.spaceKey.wasReleasedThisFrame
-                             : Keyboard.current.qKey.wasReleasedThisFrame));
+        if (Keyboard.current == null) return;
+        bool firePressed  = GameSettings.UseWasd
+            ? Keyboard.current.spaceKey.wasPressedThisFrame
+            : Keyboard.current.qKey.wasPressedThisFrame;
+        bool fireReleased = GameSettings.UseWasd
+            ? Keyboard.current.spaceKey.wasReleasedThisFrame
+            : Keyboard.current.qKey.wasReleasedThisFrame;
 
         if (firePressed && Time.time >= _nextFireTime && _attackCoroutine == null)
             _charging = true;
