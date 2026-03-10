@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using Unity.Netcode;
+using TMPro;
 
 /// <summary>
 /// NRTM Lobby & Game Scene Setup Tool.
@@ -143,13 +144,12 @@ public class NRTMSetupTool : EditorWindow
 
     private void SetupLobbyZones()
     {
-        // Relative positions on a 10×10 lobby plane
-        // X spread = ±3.5 u,  Z spread = ±3 u from lobby centre
-        CreateLobbyZone("BlueTeamZone",  LobbyPos(-3.5f, 0f),  1.8f, new Color(0.2f, 0.5f, 1f,  0.55f), LobbyZone.ZoneType.BlueTeam);
-        CreateLobbyZone("RedTeamZone",   LobbyPos( 3.5f, 0f),  1.8f, new Color(1f,  0.25f, 0.25f, 0.55f), LobbyZone.ZoneType.RedTeam);
-        CreateLobbyZone("StartGameZone", LobbyPos( 0f,   4f),  1.6f, new Color(0.2f, 0.85f, 0.2f, 0.55f), LobbyZone.ZoneType.StartGame);
-        CreateLobbyZone("CharSelect1",   LobbyPos(-2.5f,-3.5f),1.4f, new Color(0.7f, 0.7f,  0.7f, 0.55f), LobbyZone.ZoneType.CharSelect1);
-        CreateLobbyZone("CharSelect2",   LobbyPos( 2.5f,-3.5f),1.4f, new Color(0.7f, 0.7f,  0.7f, 0.55f), LobbyZone.ZoneType.CharSelect2);
+        // Offsets are 5× the original compact layout so zones spread across the wider lobby area
+        CreateLobbyZone("BlueTeamZone",  LobbyPos(-14f,   0f),  1.8f, new Color(0.2f, 0.5f,  1f,   0.55f), LobbyZone.ZoneType.BlueTeam,   "Join Blue Team");
+        CreateLobbyZone("RedTeamZone",   LobbyPos( 14f,   0f),  1.8f, new Color(1f,  0.25f,  0.25f,0.55f), LobbyZone.ZoneType.RedTeam,    "Join Red Team");
+        CreateLobbyZone("StartGameZone", LobbyPos(  0f,  16f),  1.6f, new Color(0.2f, 0.85f, 0.2f, 0.55f), LobbyZone.ZoneType.StartGame,  "Start Game");
+        CreateLobbyZone("CharSelect1",   LobbyPos(-10f, -14f),  1.4f, new Color(0.7f, 0.7f,  0.7f, 0.55f), LobbyZone.ZoneType.CharSelect1,"Character 1");
+        CreateLobbyZone("CharSelect2",   LobbyPos( 10f, -14f),  1.4f, new Color(0.7f, 0.7f,  0.7f, 0.55f), LobbyZone.ZoneType.CharSelect2,"Character 2");
         Debug.Log("[NRTM] Lobby zones created.");
     }
 
@@ -157,7 +157,7 @@ public class NRTMSetupTool : EditorWindow
     private Vector3 LobbyPos(float dx, float dz) =>
         new Vector3(_lobbyCenter.x + dx, _lobbyFloorY, _lobbyCenter.z + dz);
 
-    private void CreateLobbyZone(string name, Vector3 pos, float radius, Color discColor, LobbyZone.ZoneType type)
+    private void CreateLobbyZone(string name, Vector3 pos, float radius, Color discColor, LobbyZone.ZoneType type, string label)
     {
         var go = new GameObject(name);
         go.transform.position = pos;
@@ -177,14 +177,29 @@ public class NRTMSetupTool : EditorWindow
         disc.transform.localScale    = new Vector3(radius * 2f, 0.04f, radius * 2f);
         DestroyImmediate(disc.GetComponent<Collider>());
 
-        var mat      = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-        mat.color    = discColor;
-        // Enable transparency
-        mat.SetFloat("_Surface", 1f);   // 0 = opaque, 1 = transparent
-        mat.SetFloat("_Blend",   0f);   // Alpha blend
+        var mat   = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        mat.color = discColor;
+        mat.SetFloat("_Surface", 1f);
+        mat.SetFloat("_Blend",   0f);
         mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
         mat.renderQueue = 3000;
         disc.GetComponent<Renderer>().sharedMaterial = mat;
+
+        // World-space TMP label — lies flat on the disc, readable from the isometric camera (45,45,0)
+        var textGo = new GameObject("Label");
+        textGo.transform.SetParent(go.transform, false);
+        // Lay text flat on the ground (X=90) then rotate to face camera's view direction (Y=-45 for camera Y=45)
+        textGo.transform.localPosition = new Vector3(0f, 0.12f, 0f);   // just above disc surface
+        textGo.transform.localRotation = Quaternion.Euler(90f, -45f, 0f);
+
+        var tmp = textGo.AddComponent<TMPro.TextMeshPro>();
+        tmp.text      = label;
+        tmp.fontSize  = 3f;
+        tmp.alignment = TMPro.TextAlignmentOptions.Center;
+        tmp.color     = Color.white;
+        tmp.fontStyle = TMPro.FontStyles.Bold;
+        // Size the rect to contain the text
+        tmp.rectTransform.sizeDelta = new Vector2(radius * 4f, radius * 2f);
 
         Undo.RegisterCreatedObjectUndo(go, $"Create {name}");
     }

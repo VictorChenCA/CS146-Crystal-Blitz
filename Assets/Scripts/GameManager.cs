@@ -191,11 +191,9 @@ public class GameManager : MonoBehaviour
             case UIState.ConnectionScreen: DrawConnectionScreen(); break;
             case UIState.InGame:
                 DrawInGameHUD();
-                DrawPhaseHUD();
                 break;
             case UIState.Settings:
                 DrawInGameHUD();
-                DrawPhaseHUD();
                 DrawSettingsPanel();
                 break;
         }
@@ -205,41 +203,35 @@ public class GameManager : MonoBehaviour
     // Draw: Phase-specific HUD overlays
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void DrawPhaseHUD()
+    /// <summary>
+    /// Draws the persistent top-of-screen phase banner and returns the Y
+    /// position just below it so callers can stack further boxes underneath.
+    /// </summary>
+    private float DrawPhaseTopBanner(float startY)
     {
         var gpm = GamePhaseManager.Instance;
-        if (gpm == null) return;
+        if (gpm == null) return startY;
 
-        var phase = gpm.Phase.Value;
+        if (gpm.Phase.Value == GamePhaseManager.GamePhase.Lobby)
+            return DrawLobbyBanner(gpm, startY);
 
-        switch (phase)
-        {
-            case GamePhaseManager.GamePhase.Lobby:
-                DrawLobbyHUD(gpm);
-                break;
-
-            case GamePhaseManager.GamePhase.Countdown:
-                DrawCountdownHUD(gpm);
-                break;
-
-            case GamePhaseManager.GamePhase.GameOver:
-                DrawGameOverHUD(gpm);
-                break;
-        }
+        return startY;
     }
 
-    private void DrawLobbyHUD(GamePhaseManager gpm)
+    private float DrawLobbyBanner(GamePhaseManager gpm, float startY)
     {
         float sw = Screen.width;
+        float w  = 700f, h = 90f;
+        float x  = (sw - w) * 0.5f;
 
-        // Zone legend — top center
-        float w = 500f, h = 64f;
-        float x = (sw - w) * 0.5f;
         int total = NetworkManager.Singleton != null
             ? NetworkManager.Singleton.ConnectedClientsList.Count : 1;
+
         string msg = $"Walk into a colored zone to pick your team!\n" +
                      $"{gpm.PlayersReadyCount.Value}/{total} players ready in start zone";
-        GUI.Box(new Rect(x, 10f, w, h), msg, _announcementStyle);
+
+        GUI.Box(new Rect(x, startY, w, h), msg, _announcementStyle);
+        return startY + h + 6f;
     }
 
     private void DrawCountdownHUD(GamePhaseManager gpm)
@@ -414,19 +406,38 @@ public class GameManager : MonoBehaviour
             return; // server has no local player — skip rest of HUD
         }
 
-        // Lobby created announcement (top-centre, 8 s)
+        // ── Top-of-screen announcements — stacked in order ────────────────────
+        float nextY = 10f;
+        const float boxGap = 6f;
+
+        // 1. Phase-specific banner (lobby zone info — always visible in lobby)
+        nextY = DrawPhaseTopBanner(nextY);
+
+        // 2. Relay / lobby-created message (temporary, 8 s)
         if (_lobbyMessageEnd > Time.time)
         {
             float w = 700f, h = 88f;
-            GUI.Box(new Rect((Screen.width - w) * 0.5f, 10f, w, h), _lobbyMessage, _announcementStyle);
+            GUI.Box(new Rect((Screen.width - w) * 0.5f, nextY, w, h), _lobbyMessage, _announcementStyle);
+            nextY += h + boxGap;
         }
 
-        // Kill announcement (top-centre, 4 s)
+        // 3. Kill feed (temporary, 4 s)
         if (_killMessageEnd > Time.time)
         {
             float w = 700f, h = 88f;
-            GUI.Box(new Rect((Screen.width - w) * 0.5f, 106f, w, h), _killMessage, _announcementStyle);
+            GUI.Box(new Rect((Screen.width - w) * 0.5f, nextY, w, h), _killMessage, _announcementStyle);
         }
+
+        // ── Centre-screen overlays (not stacked — they own the middle) ─────────
+
+        // Countdown (large number, centre screen)
+        var gpm = GamePhaseManager.Instance;
+        if (gpm != null && gpm.Phase.Value == GamePhaseManager.GamePhase.Countdown)
+            DrawCountdownHUD(gpm);
+
+        // Game-over banner (centre screen)
+        if (gpm != null && gpm.Phase.Value == GamePhaseManager.GamePhase.GameOver)
+            DrawGameOverHUD(gpm);
 
         // Death countdown (centre screen)
         if (_deathTimerEnd > Time.time)
