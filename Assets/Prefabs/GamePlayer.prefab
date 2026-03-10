@@ -237,7 +237,7 @@ MonoBehaviour:
   firePoint: {fileID: 8689417454509932622}
   projectileSpeed: 26
   maxRange: 18
-  damage: 45
+  damage: 40
   fireCooldown: 1.5
   castDelay: 0.4
   animationDelay: 0.4
@@ -276,7 +276,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AutoAttacker
   ShowTopMostFoldoutHeaderGroup: 1
-  autoAttackRange: 10
+  autoAttackRange: 12
   autoAttackCooldown: 1
   windUpDuration: 0.25
   projectileSpeed: 18
@@ -327,7 +327,7 @@ MonoBehaviour:
   launchOffset: 0.5
   orbitRadius: 1.5
   orbitSpeed: 360
-  orbitBallSize: 0.75
+  orbitBallSize: 0.9
   manaCost: 30
 --- !u!114 &-5026939236243210125
 MonoBehaviour:
@@ -363,12 +363,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMana
   ShowTopMostFoldoutHeaderGroup: 1
-  baseMana: 100
-  manaRegenPerSecond: 3
+  baseMana: 200
+  manaRegenPerSecond: 4
+  spawnRegenPerTick: 5
+  spawnRegenTickRate: 4
   Mana:
     m_InternalValue: 0
   MaxMana:
-    m_InternalValue: 100
+    m_InternalValue: 200
 --- !u!114 &1984488755415209783
 MonoBehaviour:
   m_ObjectHideFlags: 0

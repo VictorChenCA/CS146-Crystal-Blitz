@@ -78,12 +78,14 @@ public class MinionHealth : NetworkBehaviour, IDamageable
 
     public override void OnNetworkSpawn()
     {
+        GameObjectRegistry.Minions.Add(this);
         TeamIndexNet.OnValueChanged += (_, current) => ApplyTeamColor(current);
         ApplyTeamColor(TeamIndexNet.Value);
     }
 
     public override void OnNetworkDespawn()
     {
+        GameObjectRegistry.Minions.Remove(this);
         TeamIndexNet.OnValueChanged -= (_, current) => ApplyTeamColor(current);
     }
 

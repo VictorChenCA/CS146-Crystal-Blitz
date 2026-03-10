@@ -29,6 +29,12 @@ public class MinionController : NetworkBehaviour
     // Enemy crystal cache (advance lane destination)
     private Transform _enemyCrystal;
 
+    // Destination throttle
+    private Vector3 _lastSetDest;
+    private float   _nextDestTime;
+    private const float DestInterval = 0.12f;  // ~8 Hz
+    private const float DestMoveSqr  = 0.25f;  // 0.5u threshold squared
+
     // ── Init ──────────────────────────────────────────────────────────────────
 
     public void Initialize(int teamIndex, MinionSettings settings)
@@ -39,12 +45,13 @@ public class MinionController : NetworkBehaviour
         _agent = GetComponent<NavMeshAgent>();
         if (_agent != null)
         {
-            _agent.speed            = settings.moveSpeed;
-            _agent.angularSpeed     = 9999f;
-            _agent.acceleration     = 9999f;
-            _agent.autoBraking      = false;
-            _agent.updateRotation   = false;
-            _agent.stoppingDistance = settings.navStoppingDistance;
+            _agent.speed                 = settings.moveSpeed;
+            _agent.angularSpeed          = 9999f;
+            _agent.acceleration          = 9999f;
+            _agent.autoBraking           = false;
+            _agent.updateRotation        = false;
+            _agent.stoppingDistance      = settings.navStoppingDistance;
+            _agent.obstacleAvoidanceType = UnityEngine.AI.ObstacleAvoidanceType.NoObstacleAvoidance;
             Debug.Log($"[Minion T{teamIndex}] Agent found. isOnNavMesh={_agent.isOnNavMesh} speed={_agent.speed}");
         }
         else
@@ -112,7 +119,7 @@ public class MinionController : NetworkBehaviour
             }
             else
             {
-                _agent.SetDestination(_targetTransform.position);
+                TrySetDestination(_targetTransform.position);
             }
         }
         else
@@ -121,6 +128,18 @@ public class MinionController : NetworkBehaviour
         }
 
         SyncPosition();
+    }
+
+    // ── Destination throttle ──────────────────────────────────────────────────
+
+    private void TrySetDestination(Vector3 dest)
+    {
+        if (_agent.pathPending) return;
+        if (Time.time < _nextDestTime) return;
+        if ((dest - _lastSetDest).sqrMagnitude < DestMoveSqr) return;
+        _agent.SetDestination(dest);
+        _lastSetDest  = dest;
+        _nextDestTime = Time.time + DestInterval;
     }
 
     // ── Target selection ──────────────────────────────────────────────────────
@@ -134,7 +153,7 @@ public class MinionController : NetworkBehaviour
         float   bestDist   = _settings.aggroRange;
         MinionHealth bestMinion = null;
 
-        foreach (var mh in FindObjectsByType<MinionHealth>(FindObjectsSortMode.None))
+        foreach (var mh in GameObjectRegistry.Minions)
         {
             if (mh == _health) continue;
             if (mh.Health.Value <= 0f) continue;
@@ -184,7 +203,7 @@ public class MinionController : NetworkBehaviour
         float structDist  = float.MaxValue;
         float crystalDist = float.MaxValue;
 
-        foreach (var s in FindObjectsByType<StructureHealth>(FindObjectsSortMode.None))
+        foreach (var s in GameObjectRegistry.Structures)
         {
             if (!s.IsAlive.Value) continue;
             if (s.TeamIndex == TeamIndex) continue;
@@ -250,7 +269,7 @@ public class MinionController : NetworkBehaviour
     private void CacheEnemyCrystal()
     {
         int enemyTeam = TeamIndex == 0 ? 1 : 0;
-        foreach (var s in FindObjectsByType<StructureHealth>(FindObjectsSortMode.None))
+        foreach (var s in GameObjectRegistry.Structures)
         {
             if (s.IsCrystal && s.TeamIndex == enemyTeam)
             {

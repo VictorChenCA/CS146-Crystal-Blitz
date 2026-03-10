@@ -55,6 +55,7 @@ public class StructureHealth : NetworkBehaviour, IDamageable
 
     public override void OnNetworkSpawn()
     {
+        GameObjectRegistry.Structures.Add(this);
         if (IsServer)
             Health.Value = maxHealth;
 
@@ -64,6 +65,7 @@ public class StructureHealth : NetworkBehaviour, IDamageable
 
     public override void OnNetworkDespawn()
     {
+        GameObjectRegistry.Structures.Remove(this);
         IsAlive.OnValueChanged -= OnIsAliveChanged;
     }
 

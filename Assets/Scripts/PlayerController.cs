@@ -41,8 +41,16 @@ public class PlayerController : NetworkBehaviour
     private const float PositionSendThreshold = 0.05f;  // ignore sub-5cm jitter
 
     // ── Destination set throttle ──────────────────────────────────────────────
-    private float _lastDestSetTime;
+    private Vector3 _lastNavDest        = Vector3.positiveInfinity;
+    private float   _lastDestSetTime;
     private const float DestSetInterval = 0.1f;         // 10 Hz max — prevents NavMesh thrash
+    private const float NavDestMoveSqr  = 0.25f;        // 0.5u threshold — skip trivial re-paths
+
+    // ── Chase destination throttle ────────────────────────────────────────────
+    private Vector3 _lastChaseDest      = Vector3.positiveInfinity;
+    private float   _nextChaseDestTime;
+    private const float ChaseDestInterval = 0.05f;  // 20 Hz
+    private const float ChaseMoveSqr      = 0.09f;  // 0.3u threshold squared
 
     // ── Click indicator (owner-only visual ring at nav destination) ───────────
     private LineRenderer _clickIndicator;
@@ -98,6 +106,7 @@ public class PlayerController : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        GameObjectRegistry.Players.Add(this);
         Position.OnValueChanged    += OnPositionChanged;
         PlayerColor.OnValueChanged += OnPlayerColorChanged;
 
@@ -134,12 +143,13 @@ public class PlayerController : NetworkBehaviour
 
         if (_agent != null)
         {
-            _agent.speed            = moveSpeed;
-            _agent.angularSpeed     = 9999f;
-            _agent.acceleration     = 9999f;   // instant acceleration
-            _agent.autoBraking      = false;   // no deceleration near destination
-            _agent.stoppingDistance = 0.15f;
-            _agent.updateRotation   = false;
+            _agent.speed                  = moveSpeed;
+            _agent.angularSpeed           = 9999f;
+            _agent.acceleration           = 9999f;   // instant acceleration
+            _agent.autoBraking            = false;   // no deceleration near destination
+            _agent.stoppingDistance       = 0.15f;
+            _agent.updateRotation         = false;
+            _agent.obstacleAvoidanceType  = UnityEngine.AI.ObstacleAvoidanceType.NoObstacleAvoidance;
         }
 
         // Apply server-assigned spawn position. OnPositionChanged skips the owner,
@@ -159,6 +169,7 @@ public class PlayerController : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
+        GameObjectRegistry.Players.Remove(this);
         Position.OnValueChanged    -= OnPositionChanged;
         PlayerColor.OnValueChanged -= OnPlayerColorChanged;
 
@@ -361,27 +372,39 @@ public class PlayerController : NetworkBehaviour
 
     // ── Public NavMesh API (used by AutoAttacker) ─────────────────────────────
 
-    /// <summary>Player-commanded move: throttled to 10 Hz to avoid NavMesh pathfinder thrash.</summary>
+    /// <summary>Player-commanded move: throttled to prevent rapid-click thrash.</summary>
     public void SetNavDestination(Vector3 worldPos)
     {
         if (_agent == null || !_agent.enabled) return;
         if (Time.time < _movementLockUntil) return;
         if (Time.time - _lastDestSetTime < DestSetInterval) return;
+        if ((worldPos - _lastNavDest).sqrMagnitude < NavDestMoveSqr) return;
 
         _lastDestSetTime = Time.time;
+        _lastNavDest     = worldPos;
         _agent.SetDestination(worldPos);
         ShowClickIndicator(worldPos);
     }
 
-    /// <summary>AA-commanded chase: no lane clamp, no indicator.</summary>
-    public void SetChaseDestination(Vector3 worldPos)
+    /// <summary>AA-commanded chase: throttled to 20 Hz to avoid NavMesh pathfinder thrash.</summary>
+    public void SetChaseDestination(Vector3 pos)
     {
-        if (_agent == null || !_agent.enabled) return;
-        _agent.SetDestination(worldPos);
+        if (_agent == null || !_agent.enabled || Time.time < _movementLockUntil) return;
+        if (_agent.pathPending) return;
+        if (Time.time < _nextChaseDestTime) return;
+        if ((pos - _lastChaseDest).sqrMagnitude < ChaseMoveSqr) return;
+        _agent.SetDestination(pos);
+        _lastChaseDest     = pos;
+        _nextChaseDestTime = Time.time + ChaseDestInterval;
     }
 
     /// <summary>Cancels any active NavMesh path.</summary>
-    public void StopNavMovement() => _agent?.ResetPath();
+    public void StopNavMovement()
+    {
+        _agent?.ResetPath();
+        _lastChaseDest     = Vector3.positiveInfinity;
+        _nextChaseDestTime = 0f;
+    }
 
     /// <summary>Immediately submits a position to the server (used by DashAbility).</summary>
     public void ForceSubmitPosition(Vector3 pos) => SubmitPositionServerRpc(pos);
