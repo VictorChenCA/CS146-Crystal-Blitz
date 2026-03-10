@@ -71,7 +71,10 @@ public class ProjectileShooter : NetworkBehaviour
             : Keyboard.current.qKey.wasReleasedThisFrame;
 
         if (firePressed && Time.time >= _nextFireTime && _attackCoroutine == null)
+        {
             _charging = true;
+            GetComponent<TripleShotAbility>()?.CancelCharge();
+        }
 
         if (_charging)
         {
@@ -123,6 +126,7 @@ public class ProjectileShooter : NetworkBehaviour
         var pc = GetComponent<PlayerController>();
         pc?.LockMovement(castDelay + animationDelay);
         GetComponent<AutoAttacker>()?.CancelAutoAttack();
+        GetComponent<TripleShotAbility>()?.CancelCharge();
 
         // Compute offset start position toward target
         Vector3 castDir   = targetPos - firePoint.position;

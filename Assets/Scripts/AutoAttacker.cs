@@ -182,6 +182,7 @@ public class AutoAttacker : NetworkBehaviour
                     {
                         _target       = enemy;
                         _targetNetObj = netObj;
+                        GetComponent<TripleShotAbility>()?.CancelCharge();
                         if (_attackCoroutine != null) StopCoroutine(_attackCoroutine);
                         _attackCoroutine = StartCoroutine(AutoAttackLoop());
                         return true;
@@ -213,6 +214,7 @@ public class AutoAttacker : NetworkBehaviour
 
         _target       = _hoveredEnemy;
         _targetNetObj = hoverNetObj;
+        GetComponent<TripleShotAbility>()?.CancelCharge();
         if (_attackCoroutine != null) StopCoroutine(_attackCoroutine);
         _attackCoroutine = StartCoroutine(AutoAttackLoop());
         return true;

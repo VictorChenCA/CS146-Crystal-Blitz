@@ -321,6 +321,9 @@ MonoBehaviour:
   cooldown: 4
   delayBetweenShots: 0.15
   launchOffset: 0.5
+  orbitRadius: 1.5
+  orbitSpeed: 360
+  orbitBallSize: 0.4
 --- !u!1 &8598427067344695647
 GameObject:
   m_ObjectHideFlags: 0
