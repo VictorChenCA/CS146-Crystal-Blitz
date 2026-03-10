@@ -83,10 +83,22 @@ public class TowerAttack : NetworkBehaviour
 
     private IDamageable FindNearestEnemy()
     {
+        // Minions first
         IDamageable best     = null;
         float       bestDist = range + 1f;
 
-        // Players
+        foreach (var mh in FindObjectsByType<MinionHealth>(FindObjectsSortMode.None))
+        {
+            if (mh.Health.Value <= 0f) continue;
+            if (mh.TeamIndexNet.Value == teamIndex) continue;
+
+            float dist = Vector3.Distance(transform.position, mh.transform.position);
+            if (dist <= range && dist < bestDist) { bestDist = dist; best = mh; }
+        }
+
+        if (best != null) return best;
+
+        // Players if no minion in range
         foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
         {
             var playerObj = client.PlayerObject;
@@ -100,16 +112,6 @@ public class TowerAttack : NetworkBehaviour
 
             float dist = Vector3.Distance(transform.position, playerObj.transform.position);
             if (dist <= range && dist < bestDist) { bestDist = dist; best = ph; }
-        }
-
-        // Minions
-        foreach (var mh in FindObjectsByType<MinionHealth>(FindObjectsSortMode.None))
-        {
-            if (mh.Health.Value <= 0f) continue;
-            if (mh.TeamIndexNet.Value == teamIndex) continue;
-
-            float dist = Vector3.Distance(transform.position, mh.transform.position);
-            if (dist <= range && dist < bestDist) { bestDist = dist; best = mh; }
         }
 
         return best;

@@ -101,17 +101,18 @@ public class MinionController : NetworkBehaviour
 
         if (_targetTransform != null)
         {
-            float dist = Vector3.Distance(transform.position, _targetTransform.position);
-            if (dist <= _settings.attackRange)
+            float dist          = Vector3.Distance(transform.position, _targetTransform.position);
+            bool  atDestination = _agent.hasPath && !_agent.pathPending && _agent.remainingDistance <= _agent.stoppingDistance + 0.1f;
+            bool  inRange       = dist <= _settings.attackRange;
+
+            if (inRange || atDestination)
             {
                 _agent.ResetPath();
                 TryAttack();
             }
             else
             {
-                Vector3 dest = NearestNavMeshPoint(_targetTransform.position);
-                bool ok = _agent.SetDestination(dest);
-                if (!ok) Debug.LogWarning($"[Minion T{TeamIndex}] SetDestination failed for target {_targetTransform.name}");
+                _agent.SetDestination(_targetTransform.position);
             }
         }
         else
@@ -154,7 +155,30 @@ public class MinionController : NetworkBehaviour
             return;
         }
 
-        // 2. Nearest alive non-crystal enemy structure
+        // 2. Nearest enemy player within aggroRange
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            var playerObj = client.PlayerObject;
+            if (playerObj == null) continue;
+
+            var pc = playerObj.GetComponent<PlayerController>();
+            if (pc == null || pc.TeamIndex.Value == TeamIndex) continue;
+
+            var ph = playerObj.GetComponent<PlayerHealth>();
+            if (ph == null || ph.IsDead) continue;
+
+            float d = Vector3.Distance(transform.position, playerObj.transform.position);
+            if (d < bestDist)
+            {
+                bestDist         = d;
+                _target          = ph;
+                _targetTransform = playerObj.transform;
+            }
+        }
+
+        if (_target != null) return;
+
+        // 3. Nearest alive non-crystal enemy structure
         StructureHealth nearestStructure = null;
         StructureHealth nearestCrystal  = null;
         float structDist  = float.MaxValue;
@@ -195,11 +219,16 @@ public class MinionController : NetworkBehaviour
     private void TryAttack()
     {
         if (Time.time < _nextAttackTime) return;
-        if (_target == null) return;
+        if (_target == null || _targetTransform == null) return;
 
-        // Team check for minion targets (IDamageable doesn't expose team directly)
+        // Team check (IDamageable doesn't expose team directly)
         if (_target is MinionHealth enemyMh && enemyMh.TeamIndexNet.Value == TeamIndex) return;
         if (_target is StructureHealth s && s.TeamIndex == TeamIndex) return;
+        if (_target is PlayerHealth ph)
+        {
+            var pc = ph.GetComponent<PlayerController>();
+            if (pc != null && pc.TeamIndex.Value == TeamIndex) return;
+        }
 
         _nextAttackTime = Time.time + _settings.attackCooldown;
         _target.TakeDamage(_settings.attackDamage, ulong.MaxValue);
@@ -215,16 +244,7 @@ public class MinionController : NetworkBehaviour
             Debug.LogWarning($"[Minion T{TeamIndex}] No enemy crystal found — cannot advance lane.");
             return;
         }
-        Vector3 dest = NearestNavMeshPoint(_enemyCrystal.position);
-        bool ok = _agent.SetDestination(dest);
-        if (!ok) Debug.LogWarning($"[Minion T{TeamIndex}] SetDestination failed for crystal {_enemyCrystal.name}");
-    }
-
-    private static Vector3 NearestNavMeshPoint(Vector3 pos)
-    {
-        if (NavMesh.SamplePosition(pos, out NavMeshHit hit, 5f, NavMesh.AllAreas))
-            return hit.position;
-        return pos;
+        _agent.SetDestination(_enemyCrystal.position);
     }
 
     private void CacheEnemyCrystal()

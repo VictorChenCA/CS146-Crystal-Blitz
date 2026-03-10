@@ -56,6 +56,31 @@ public class MinionHealth : NetworkBehaviour, IDamageable
         TeamIndexNet.Value  = teamIndex;
     }
 
+    // ── Network spawn ─────────────────────────────────────────────────────────
+
+    public override void OnNetworkSpawn()
+    {
+        TeamIndexNet.OnValueChanged += (_, current) => ApplyTeamColor(current);
+        ApplyTeamColor(TeamIndexNet.Value);
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        TeamIndexNet.OnValueChanged -= (_, current) => ApplyTeamColor(current);
+    }
+
+    private void ApplyTeamColor(int teamIndex)
+    {
+        var rend = GetComponent<Renderer>();
+        if (rend == null) return;
+        var block = new MaterialPropertyBlock();
+        rend.GetPropertyBlock(block);
+        block.SetColor("_BaseColor", teamIndex == 0
+            ? new Color(0.2f, 0.4f, 1f)
+            : new Color(1f, 0.2f, 0.2f));
+        rend.SetPropertyBlock(block);
+    }
+
     // ── Health bar ────────────────────────────────────────────────────────────
 
     private Camera _cam;
