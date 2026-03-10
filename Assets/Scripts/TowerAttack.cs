@@ -95,7 +95,7 @@ public class TowerAttack : NetworkBehaviour
             if (pc == null || pc.TeamIndex.Value == teamIndex) continue;
 
             var ph = playerObj.GetComponent<PlayerHealth>();
-            if (ph == null) continue;
+            if (ph == null || ph.IsDead) continue;
 
             float dist = Vector3.Distance(transform.position, playerObj.transform.position);
             if (dist <= range && dist < nearestDist)

@@ -31,6 +31,16 @@ public class PlayerController : NetworkBehaviour
     private AutoAttacker           _autoAttacker;
     private readonly Plane         _groundPlane = new Plane(Vector3.up, Vector3.zero);
 
+    // ── Position sync throttle ────────────────────────────────────────────────
+    private Vector3 _lastSentPosition;
+    private float   _lastPositionSendTime;
+    private const float PositionSendInterval  = 0.05f;  // 20 Hz max
+    private const float PositionSendThreshold = 0.05f;  // ignore sub-5cm jitter
+
+    // ── Destination set throttle ──────────────────────────────────────────────
+    private float _lastDestSetTime;
+    private const float DestSetInterval = 0.1f;         // 10 Hz max — prevents NavMesh thrash
+
     // ── Click indicator (owner-only visual ring at nav destination) ───────────
     private LineRenderer _clickIndicator;
     private Vector3      _indicatorCenter;
@@ -278,8 +288,17 @@ public class PlayerController : NetworkBehaviour
         // Keep agent speed in sync with moveSpeed so both modes are always identical
         _agent.speed = moveSpeed;
 
-        if (_agent.hasPath && _agent.velocity.sqrMagnitude > 0.01f)
-            SubmitPositionServerRpc(transform.position);
+        if (!_agent.hasPath || _agent.velocity.sqrMagnitude <= 0.01f) return;
+
+        // Throttle: send at most 20 Hz and only when position changed meaningfully
+        float now = Time.time;
+        Vector3 pos = transform.position;
+        if (now - _lastPositionSendTime < PositionSendInterval) return;
+        if ((pos - _lastSentPosition).sqrMagnitude < PositionSendThreshold * PositionSendThreshold) return;
+
+        _lastPositionSendTime = now;
+        _lastSentPosition     = pos;
+        SubmitPositionServerRpc(pos);
     }
 
     // ── Right-click input (both modes) ────────────────────────────────────────
@@ -315,12 +334,14 @@ public class PlayerController : NetworkBehaviour
 
     // ── Public NavMesh API (used by AutoAttacker) ─────────────────────────────
 
-    /// <summary>Player-commanded move: clamps to lane (InGame only) and shows click indicator.</summary>
+    /// <summary>Player-commanded move: throttled to 10 Hz to avoid NavMesh pathfinder thrash.</summary>
     public void SetNavDestination(Vector3 worldPos)
     {
         if (_agent == null || !_agent.enabled) return;
         if (Time.time < _movementLockUntil) return;
+        if (Time.time - _lastDestSetTime < DestSetInterval) return;
 
+        _lastDestSetTime = Time.time;
         _agent.SetDestination(worldPos);
         ShowClickIndicator(worldPos);
     }

@@ -25,6 +25,7 @@ public class AutoAttacker : NetworkBehaviour
     [SerializeField] private GameObject autoAttackProjectilePrefab;
 
     private PlayerController _pc;
+    private PlayerHealth     _health;
     private Camera           _mainCamera;
     private readonly Plane   _groundPlane = new Plane(Vector3.up, Vector3.zero);
 
@@ -56,6 +57,7 @@ public class AutoAttacker : NetworkBehaviour
         }
 
         _pc         = GetComponent<PlayerController>();
+        _health     = GetComponent<PlayerHealth>();
         _mainCamera = Camera.main;
 
         BuildCursorTextures();
@@ -85,6 +87,7 @@ public class AutoAttacker : NetworkBehaviour
     {
         if (_mainCamera == null) return;
         if (Mouse.current == null) return;
+        if (_health != null && _health.IsDead) return;
         UpdateHoverDetection();
         UpdateAttackMoveIndicator();
     }
@@ -117,6 +120,12 @@ public class AutoAttacker : NetworkBehaviour
         {
             var pc = hit.collider.GetComponent<PlayerController>();
             if (pc != null && pc != _pc && pc.TeamIndex.Value != myTeam)
+            {
+                _hoveredEnemy = hit.collider.transform;
+                break;
+            }
+            // Training dummy is also a valid hover target
+            if (hit.collider.GetComponent<TrainingDummy>() != null)
             {
                 _hoveredEnemy = hit.collider.transform;
                 break;
@@ -215,6 +224,13 @@ public class AutoAttacker : NetworkBehaviour
     {
         while (_target != null && _targetNetObj != null && _targetNetObj.IsSpawned)
         {
+            // Cancel if owner died
+            if (_health != null && _health.IsDead)
+            {
+                _attackCoroutine = null;
+                yield break;
+            }
+
             // WASD input cancels the chase
             if (GameSettings.UseWasd && HasWasdInput())
             {
@@ -314,14 +330,21 @@ public class AutoAttacker : NetworkBehaviour
                 .TryGetValue(targetNetObjId, out var targetNetObj)) return;
 
         var targetHealth = targetNetObj.GetComponent<PlayerHealth>();
-        if (targetHealth == null) return;
+        if (targetHealth != null)
+        {
+            // Homing projectile for players
+            GameObject proj   = Instantiate(autoAttackProjectilePrefab, transform.position, Quaternion.identity);
+            var        netObj = proj.GetComponent<NetworkObject>();
+            netObj.Spawn(true);
+            var controller = proj.GetComponent<HomingProjectileController>();
+            controller.Initialize(targetHealth, projectileSpeed, OwnerClientId, dmg);
+            return;
+        }
 
-        GameObject proj   = Instantiate(autoAttackProjectilePrefab, transform.position, Quaternion.identity);
-        var        netObj = proj.GetComponent<NetworkObject>();
-        netObj.Spawn(true);
-
-        var controller = proj.GetComponent<HomingProjectileController>();
-        controller.Initialize(targetHealth, projectileSpeed, OwnerClientId, dmg);
+        // Direct damage for non-player targets (e.g. TrainingDummy)
+        var damageable = targetNetObj.GetComponent<IDamageable>();
+        if (damageable != null && !damageable.IsImmuneTo(OwnerClientId))
+            damageable.TakeDamage(dmg, OwnerClientId);
     }
 
     // ── Attack-move helpers ───────────────────────────────────────────────────
@@ -357,6 +380,19 @@ public class AutoAttacker : NetworkBehaviour
                 nearestDist = dist;
             }
         }
+
+        // Training dummy is always a valid target
+        var dummy = TrainingDummy.Instance;
+        if (dummy != null)
+        {
+            float dist = Vector3.Distance(worldPos, dummy.transform.position);
+            if (dist <= radius && dist < nearestDist)
+            {
+                nearest = dummy.transform;
+                nearestDist = dist;
+            }
+        }
+
         return nearest;
     }
 

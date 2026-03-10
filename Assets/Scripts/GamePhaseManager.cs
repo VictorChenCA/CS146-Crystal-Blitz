@@ -186,6 +186,13 @@ public class GamePhaseManager : NetworkBehaviour
         }
     }
 
+    /// <summary>Returns a random spawn point on top of the team's cylinder (Blue Spawn / Red Spawn).</summary>
+    public Vector3 GetTeamSpawnPosition(int team)
+    {
+        string name = team == 0 ? "Blue Spawn" : "Red Spawn";
+        return RandomPointOnSpawnCylinder(name);
+    }
+
     /// <summary>Returns a random point on top of the named spawn cylinder.</summary>
     private Vector3 RandomPointOnSpawnCylinder(string cylinderName)
     {

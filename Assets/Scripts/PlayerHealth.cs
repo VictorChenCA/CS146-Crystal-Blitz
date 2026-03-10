@@ -22,6 +22,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     public static event System.Action<string> OnKillAnnouncement;
 
     public float HealthFraction => Mathf.Clamp01(Health.Value / maxHealth);
+    public bool  IsDead         => _isDead;
 
     // ── IDamageable ──────────────────────────────────────────────────────────
     public float MaxHealth     => maxHealth;
@@ -119,7 +120,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
         yield return new WaitForSeconds(respawnDelay);
 
-        var spawnPos = PlayerController.RandomSpawnForTeam(team, 1f);
+        var spawnPos = GamePhaseManager.Instance != null
+            ? GamePhaseManager.Instance.GetTeamSpawnPosition(team)
+            : PlayerController.RandomSpawnForTeam(team, 1f);
         var prefab   = NetworkManager.Singleton.NetworkConfig.PlayerPrefab;
         var go       = Instantiate(prefab, spawnPos, Quaternion.identity);
         go.GetComponent<NetworkObject>().SpawnAsPlayerObject(clientId, true);
@@ -128,6 +131,10 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         var newPc = go.GetComponent<PlayerController>();
         newPc.TeamIndex.Value   = team;
         newPc.PlayerColor.Value = col;
+
+        // OnNetworkSpawn runs before TeamIndex is set so it picks the wrong position.
+        // Re-teleport now that the team is assigned.
+        newPc.TeleportTo(spawnPos);
 
         Destroy(gameObject);
     }

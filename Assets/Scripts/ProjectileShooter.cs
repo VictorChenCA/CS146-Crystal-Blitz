@@ -54,9 +54,13 @@ public class ProjectileShooter : NetworkBehaviour
         if (firePoint == null) firePoint = transform;
     }
 
+    private PlayerHealth _health;
+
     private void Update()
     {
         if (Mouse.current == null) return;
+        if (_health == null) _health = GetComponent<PlayerHealth>();
+        if (_health != null && _health.IsDead) return;
 
         bool firePressed  = Mouse.current.leftButton.wasPressedThisFrame
                          || (Keyboard.current != null && (GameSettings.UseWasd
@@ -76,6 +80,15 @@ public class ProjectileShooter : NetworkBehaviour
             UpdateTrajectory();
             _rangeRing.enabled      = true;
             _trajectoryLine.enabled = true;
+        }
+
+        // Right-click cancels the charge without firing
+        if (_charging && Mouse.current.rightButton.wasPressedThisFrame)
+        {
+            _charging               = false;
+            _rangeRing.enabled      = false;
+            _trajectoryLine.enabled = false;
+            return;
         }
 
         if (fireReleased && _charging)
