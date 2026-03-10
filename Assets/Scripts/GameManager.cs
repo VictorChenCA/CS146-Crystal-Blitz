@@ -665,6 +665,8 @@ public class GameManager : MonoBehaviour
         var tripleShot  = localObj.GetComponent<TripleShotAbility>();
         var dash        = localObj.GetComponent<DashAbility>();
         var pc          = localObj.GetComponent<PlayerController>();
+        var mana        = localObj.GetComponent<PlayerMana>();
+        var xp          = localObj.GetComponent<PlayerXP>();
 
         // ── Layout constants (scaled) ─────────────────────────────────────
         float s            = _uiScale;
@@ -707,14 +709,14 @@ public class GameManager : MonoBehaviour
         float xpRingR = circleR - xpThickness * 0.5f;
         // Background ring (full 270°, dark)
         DrawArc(circleC, xpRingR, xpThickness, 135f, 270f, 1f, new Color(0.15f, 0.15f, 0.15f, 0.9f));
-        // Foreground ring (placeholder 0% XP)
-        DrawArc(circleC, xpRingR, xpThickness, 135f, 270f, 0f, new Color(1f, 0.78f, 0.08f, 1f));
+        // Foreground ring (real XP fraction)
+        DrawArc(circleC, xpRingR, xpThickness, 135f, 270f, xp?.XPFraction ?? 0f, new Color(1f, 0.78f, 0.08f, 1f));
 
         // Level number below the circle
         float lvlW = 40f * s, lvlH = 20f * s;
         _levelStyle.fontSize = Mathf.RoundToInt(14f * s);
         GUI.Label(new Rect(circleC.x - lvlW * 0.5f, circleTop + circleD - 2f, lvlW, lvlH),
-                  "1", _levelStyle);
+                  (xp?.Level.Value ?? 1).ToString(), _levelStyle);
 
         // ── Ability 1 — projectile ───────────────────────────────────────
         DrawRect(abX, colTop, abilitySize, abilitySize, new Color(0.12f, 0.12f, 0.12f, 0.92f));
@@ -791,17 +793,37 @@ public class GameManager : MonoBehaviour
                   "E", _levelStyle);
         _levelStyle.alignment = TextAnchor.UpperCenter;
 
+        // ── Mana cost labels on ability icons (top-right corner) ─────────
+        _levelStyle.fontSize  = Mathf.RoundToInt(10f * s);
+        _levelStyle.alignment = TextAnchor.UpperRight;
+        GUI.Label(new Rect(abX,  colTop, abilitySize - 3f * s, abilitySize - 3f * s), "20", _levelStyle);
+        GUI.Label(new Rect(ab2X, colTop, abilitySize - 3f * s, abilitySize - 3f * s), "10", _levelStyle);
+        GUI.Label(new Rect(ab3X, colTop, abilitySize - 3f * s, abilitySize - 3f * s), "30", _levelStyle);
+        _levelStyle.alignment = TextAnchor.UpperCenter;
+
         // ── Health bar ────────────────────────────────────────────────────
         float barY = colTop + abilitySize + barGap;
         DrawRect(abX, barY, colW, barH, new Color(0.08f, 0.08f, 0.08f, 0.9f));
         float hp = health != null ? health.HealthFraction : 1f;
-        if (hp > 0f)        DrawRect(abX,            barY, colW * hp,        barH, new Color(0.2f,  0.78f, 0.2f,  1f));
-        if (hp < 1f)        DrawRect(abX + colW * hp, barY, colW * (1f - hp), barH, new Color(0.72f, 0.14f, 0.14f, 1f));
+        if (hp > 0f)        DrawRect(abX,             barY, colW * hp,         barH, new Color(0.2f,  0.78f, 0.2f,  1f));
+        if (hp < 1f)        DrawRect(abX + colW * hp,  barY, colW * (1f - hp),  barH, new Color(0.72f, 0.14f, 0.14f, 1f));
 
-        // ── Mana bar — placeholder ────────────────────────────────────────
-        float manaY = barY + barH + barGap;
+        // Health numeric label — drawn over the bar
+        _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
+        _levelStyle.alignment = TextAnchor.MiddleCenter;
+        string hpLabel = $"{Mathf.CeilToInt(health?.CurrentHealth ?? 0)} / {Mathf.CeilToInt(health?.MaxHealth ?? 0)}";
+        GUI.Label(new Rect(abX, barY, colW, barH), hpLabel, _levelStyle);
+
+        // ── Mana bar ──────────────────────────────────────────────────────
+        float manaY    = barY + barH + barGap;
+        float manaFrac = mana?.ManaFraction ?? 1f;
         DrawRect(abX, manaY, colW, barH, new Color(0.08f, 0.08f, 0.08f, 0.9f));
-        DrawRect(abX, manaY, colW, barH, new Color(0.12f, 0.32f, 0.82f, 1f));
+        if (manaFrac > 0f) DrawRect(abX, manaY, colW * manaFrac, barH, new Color(0.12f, 0.32f, 0.82f, 1f));
+
+        // Mana numeric label — drawn over the bar
+        string manaLabel = $"{Mathf.CeilToInt(mana?.Mana.Value ?? 0)} / {Mathf.CeilToInt(mana?.MaxMana.Value ?? 0)}";
+        GUI.Label(new Rect(abX, manaY, colW, barH), manaLabel, _levelStyle);
+        _levelStyle.alignment = TextAnchor.UpperCenter;
     }
 
     // ── Draw helpers ──────────────────────────────────────────────────────────

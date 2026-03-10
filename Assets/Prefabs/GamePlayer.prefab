@@ -21,6 +21,8 @@ GameObject:
   - component: {fileID: -4491582939355880280}
   - component: {fileID: 865988660502746192}
   - component: {fileID: -5026939236243210125}
+  - component: {fileID: -1061012809071916253}
+  - component: {fileID: 1984488755415209783}
   m_Layer: 0
   m_Name: GamePlayer
   m_TagString: Untagged
@@ -240,6 +242,7 @@ MonoBehaviour:
   castDelay: 0.4
   animationDelay: 0.4
   launchOffset: 1
+  manaCost: 20
 --- !u!114 &9173006632108536911
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -325,6 +328,7 @@ MonoBehaviour:
   orbitRadius: 1.5
   orbitSpeed: 360
   orbitBallSize: 0.75
+  manaCost: 30
 --- !u!114 &-5026939236243210125
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -345,6 +349,47 @@ MonoBehaviour:
   arrowShaftWidth: 0.15
   arrowHeadLength: 1.2
   arrowHeadWidth: 0.6
+  manaCost: 10
+--- !u!114 &-1061012809071916253
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3733706192183858795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cf9414d4b842468699fe3359665d351, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerMana
+  ShowTopMostFoldoutHeaderGroup: 1
+  baseMana: 100
+  manaRegenPerSecond: 3
+  Mana:
+    m_InternalValue: 0
+  MaxMana:
+    m_InternalValue: 100
+--- !u!114 &1984488755415209783
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3733706192183858795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d1afdf49c81749d0a18df531ca977be, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerXP
+  ShowTopMostFoldoutHeaderGroup: 1
+  xpPerLevel: 20
+  passiveXpPerSecond: 0.1
+  healthLevelUpRatio: 0.1
+  manaLevelUpRatio: 0.1
+  XP:
+    m_InternalValue: 0
+  Level:
+    m_InternalValue: 1
 --- !u!1 &8598427067344695647
 GameObject:
   m_ObjectHideFlags: 0

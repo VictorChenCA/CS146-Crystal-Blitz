@@ -21,6 +21,7 @@ public class ProjectileShooter : NetworkBehaviour
 
     [Header("Launch")]
     [SerializeField] private float launchOffset = 0.5f;
+    [SerializeField] private float manaCost = 20f;
 
     public float CooldownFraction  => Mathf.Clamp01((_nextFireTime - Time.time) / fireCooldown);
     public float CooldownRemaining => Mathf.Max(0f, _nextFireTime - Time.time);
@@ -37,6 +38,9 @@ public class ProjectileShooter : NetworkBehaviour
     private LineRenderer _trajectoryLine;
     private const int RingSegments = 64;
 
+    private PlayerMana _mana;
+    private PlayerXP   _xp;
+
     public override void OnNetworkSpawn()
     {
         if (!IsOwner)
@@ -44,6 +48,8 @@ public class ProjectileShooter : NetworkBehaviour
             enabled = false;
             return;
         }
+        _mana = GetComponent<PlayerMana>();
+        _xp   = GetComponent<PlayerXP>();
         CreateRangeRing();
         CreateTrajectoryLine();
     }
@@ -72,6 +78,7 @@ public class ProjectileShooter : NetworkBehaviour
 
         if (firePressed && Time.time >= _nextFireTime && _attackCoroutine == null)
         {
+            if (_mana != null && !_mana.HasMana(manaCost)) return;
             _charging = true;
             GetComponent<TripleShotAbility>()?.CancelCharge();
             GetComponent<DashAbility>()?.CancelAim();
@@ -170,7 +177,9 @@ public class ProjectileShooter : NetworkBehaviour
         Destroy(preview);
 
         // Fire at end of cast phase — cooldown starts here
-        FireProjectileServerRpc(startPos, targetPos, damage);
+        _mana?.SpendManaServerRpc(manaCost);
+        float scaledDamage = damage * (1f + 0.1f * ((_xp?.Level.Value ?? 1) - 1));
+        FireProjectileServerRpc(startPos, targetPos, scaledDamage);
         _nextFireTime = Time.time + fireCooldown;
 
         // Phase 2: Animation delay — projectile in flight, can cancel lock early

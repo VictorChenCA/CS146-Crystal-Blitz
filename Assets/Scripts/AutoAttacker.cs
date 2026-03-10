@@ -26,6 +26,7 @@ public class AutoAttacker : NetworkBehaviour
 
     private PlayerController _pc;
     private PlayerHealth     _health;
+    private PlayerXP         _xp;
     private Renderer         _renderer;
     private Camera           _mainCamera;
     private readonly Plane   _groundPlane = new Plane(Vector3.up, Vector3.zero);
@@ -64,6 +65,7 @@ public class AutoAttacker : NetworkBehaviour
 
         _pc         = GetComponent<PlayerController>();
         _health     = GetComponent<PlayerHealth>();
+        _xp         = GetComponent<PlayerXP>();
         _renderer   = GetComponent<Renderer>();
         _mainCamera = Camera.main;
 
@@ -341,7 +343,8 @@ public class AutoAttacker : NetworkBehaviour
 
             // Fire — fade out over (cooldown - windUpDuration), then charge for windUpDuration
             // so the charge phase flows seamlessly into the wind-up at the same rate.
-            FireAutoAttackServerRpc(_targetNetObj.NetworkObjectId, damage);
+            float scaledDamage = damage * (1f + 0.1f * ((_xp?.Level.Value ?? 1) - 1));
+            FireAutoAttackServerRpc(_targetNetObj.NetworkObjectId, scaledDamage);
             _nextAttackTime = Time.time + autoAttackCooldown;
 
             float fadeDuration    = autoAttackCooldown - windUpDuration;

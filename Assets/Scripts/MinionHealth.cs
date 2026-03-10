@@ -3,6 +3,8 @@ using Unity.Netcode;
 
 public class MinionHealth : NetworkBehaviour, IDamageable
 {
+    [SerializeField] private float xpGrantAmount = 2f;
+    [SerializeField] private float xpGrantRange  = 20f;
     public NetworkVariable<float> Health = new NetworkVariable<float>(
         0f,
         NetworkVariableReadPermission.Everyone,
@@ -44,7 +46,23 @@ public class MinionHealth : NetworkBehaviour, IDamageable
 
         Health.Value = Mathf.Max(0f, Health.Value - amount);
         if (Health.Value <= 0f)
+        {
             GetComponent<MinionController>()?.OnDeath();
+            GrantXpToNearbyPlayers();
+        }
+    }
+
+    private void GrantXpToNearbyPlayers()
+    {
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            var playerObj = client.PlayerObject;
+            if (playerObj == null) continue;
+            var pc = playerObj.GetComponent<PlayerController>();
+            if (pc == null || pc.TeamIndex.Value == TeamIndexNet.Value) continue;
+            if (Vector3.Distance(transform.position, playerObj.transform.position) > xpGrantRange) continue;
+            playerObj.GetComponent<PlayerXP>()?.GainXP(xpGrantAmount);
+        }
     }
 
     // ── Initialize (called server-side after Spawn) ───────────────────────────

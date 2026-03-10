@@ -18,17 +18,20 @@ public class TripleShotAbility : NetworkBehaviour
     [SerializeField] private float orbitRadius   = 1.5f;
     [SerializeField] private float orbitSpeed    = 180f;  // degrees per second
     [SerializeField] private float orbitBallSize = 0.25f;
+    [SerializeField] private float manaCost      = 30f;
 
     public float CooldownFraction  => Mathf.Clamp01((_nextFireTime - Time.time) / cooldown);
     public float CooldownRemaining => Mathf.Max(0f, _nextFireTime - Time.time);
 
     private readonly Plane _groundPlane = new Plane(Vector3.up, Vector3.zero);
-    private Camera    _mainCamera;
-    private float     _nextFireTime;
-    private bool      _charging;
-    private float     _orbitAngle;
-    private Coroutine _fireCoroutine;
+    private Camera       _mainCamera;
+    private float        _nextFireTime;
+    private bool         _charging;
+    private float        _orbitAngle;
+    private Coroutine    _fireCoroutine;
     private PlayerHealth _health;
+    private PlayerMana   _mana;
+    private PlayerXP     _xp;
 
     private GameObject[] _orbitBalls;
     private LineRenderer  _rangeRing;
@@ -38,6 +41,8 @@ public class TripleShotAbility : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         if (!IsOwner) { enabled = false; return; }
+        _mana = GetComponent<PlayerMana>();
+        _xp   = GetComponent<PlayerXP>();
         CreateRangeRing();
         CreateTrajectoryLine();
         CreateOrbitBalls();
@@ -59,7 +64,10 @@ public class TripleShotAbility : NetworkBehaviour
         bool released = Keyboard.current.eKey.wasReleasedThisFrame;
 
         if (pressed && Time.time >= _nextFireTime && _fireCoroutine == null)
+        {
+            if (_mana != null && !_mana.HasMana(manaCost)) return;
             StartCharge();
+        }
 
         if (_charging)
         {
@@ -150,6 +158,11 @@ public class TripleShotAbility : NetworkBehaviour
         }
         SetOrbitBallsVisible(false);
 
+        // Deduct mana once before firing
+        _mana?.SpendManaServerRpc(manaCost);
+
+        float scaledDamage = damage * (1f + 0.1f * ((_xp?.Level.Value ?? 1) - 1));
+
         // Fire 3 projectiles in sequence
         for (int i = 0; i < 3; i++)
         {
@@ -161,7 +174,7 @@ public class TripleShotAbility : NetworkBehaviour
                 firePoint.position.x + dir.x * maxRange,
                 firePoint.position.y,
                 firePoint.position.z + dir.z * maxRange);
-            FireProjectileServerRpc(startPos, endPos, damage);
+            FireProjectileServerRpc(startPos, endPos, scaledDamage);
             if (i < 2) yield return new WaitForSeconds(delayBetweenShots);
         }
 

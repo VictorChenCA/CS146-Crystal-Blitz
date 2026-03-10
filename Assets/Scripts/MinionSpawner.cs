@@ -90,12 +90,12 @@ public class MinionSpawner : NetworkBehaviour
 
         while (true)
         {
-            SpawnWave();
+            yield return SpawnWave();
             yield return new WaitForSeconds(settings.spawnInterval);
         }
     }
 
-    private void SpawnWave()
+    private IEnumerator SpawnWave()
     {
         // Clean up dead/despawned entries
         _activeMinions.RemoveAll(no => no == null || !no.IsSpawned);
@@ -103,7 +103,7 @@ public class MinionSpawner : NetworkBehaviour
         if (settings.minionPrefab == null)
         {
             Debug.LogWarning("[MinionSpawner] minionPrefab is not assigned.");
-            return;
+            yield break;
         }
 
         for (int i = 0; i < settings.spawnCount; i++)
@@ -135,6 +135,9 @@ public class MinionSpawner : NetworkBehaviour
             mh?.Initialize(settings.maxHealth, spawnerTeam);
 
             _activeMinions.Add(netObj);
+
+            if (i < settings.spawnCount - 1 && settings.spawnDelay > 0f)
+                yield return new WaitForSeconds(settings.spawnDelay);
         }
     }
 

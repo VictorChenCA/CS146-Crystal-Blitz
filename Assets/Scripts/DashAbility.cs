@@ -26,8 +26,11 @@ public class DashAbility : NetworkBehaviour
 
     private readonly Plane _groundPlane = new Plane(Vector3.up, Vector3.zero);
 
+    [SerializeField] private float manaCost = 10f;
+
     private PlayerController _pc;
     private PlayerHealth     _health;
+    private PlayerMana       _mana;
     private NavMeshAgent     _agent;
     private LineRenderer     _arrow;
 
@@ -41,6 +44,7 @@ public class DashAbility : NetworkBehaviour
         _pc     = GetComponent<PlayerController>();
         _agent  = GetComponent<NavMeshAgent>();
         _health = GetComponent<PlayerHealth>();
+        _mana   = GetComponent<PlayerMana>();
         CreateArrowVisual();
     }
 
@@ -64,7 +68,10 @@ public class DashAbility : NetworkBehaviour
             : Keyboard.current.wKey.wasReleasedThisFrame;
 
         if (pressed && Time.time >= _nextDashTime)
+        {
+            if (_mana != null && !_mana.HasMana(manaCost)) return;
             StartAim();
+        }
 
         if (_aiming)
         {
@@ -81,6 +88,7 @@ public class DashAbility : NetworkBehaviour
                 Vector3 dir = GetAimDirection();
                 CancelAim();
                 _nextDashTime  = Time.time + cooldown;
+                _mana?.SpendManaServerRpc(manaCost);
                 _dashCoroutine = StartCoroutine(ExecuteDash(dir));
             }
         }

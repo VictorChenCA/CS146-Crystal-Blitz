@@ -24,6 +24,13 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     public float HealthFraction => Mathf.Clamp01(Health.Value / maxHealth);
     public bool  IsDead         => _isDead;
 
+    public void IncreaseMaxHealth(float delta)  // server-only
+    {
+        if (!IsServer) return;
+        maxHealth    += delta;
+        Health.Value  = Mathf.Min(Health.Value + delta, maxHealth);
+    }
+
     // ── IDamageable ──────────────────────────────────────────────────────────
     public float MaxHealth     => maxHealth;
     public float CurrentHealth => Health.Value;
