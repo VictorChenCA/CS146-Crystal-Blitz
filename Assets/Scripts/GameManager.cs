@@ -307,7 +307,7 @@ public class GameManager : MonoBehaviour
         float panelW = 220f;
         float panelH = _useRelay ? 370f : 260f;
         float panelX = (logW - panelW) * 0.5f;
-        float panelY = (logH - panelH) * 0.5f;
+        float panelY = (logH - panelH) * 0.5f + logH * 0.15f;
 
         GUILayout.BeginArea(new Rect(panelX, panelY, panelW, panelH));
 

@@ -305,16 +305,20 @@ public class NRTMSetupTool : EditorWindow
 
     private void SetupSpawnBarriers()
     {
-        CreateBarrier("SpawnBarrier_Team0", _blueSpawn + Vector3.up);
-        CreateBarrier("SpawnBarrier_Team1", _redSpawn  + Vector3.up);
+        CreateBarrier("SpawnBarrier_Team0", _blueSpawn + Vector3.up, 0);
+        CreateBarrier("SpawnBarrier_Team1", _redSpawn  + Vector3.up, 1);
         Debug.Log("[NRTM] Spawn barriers created (walls disabled by default).");
     }
 
-    private void CreateBarrier(string name, Vector3 pos)
+    private void CreateBarrier(string name, Vector3 pos, int teamIndex)
     {
         var parent = new GameObject(name);
         parent.transform.position = pos;
-        parent.AddComponent<SpawnBarrierController>();
+
+        var barrier = parent.AddComponent<SpawnBarrierController>();
+        var so = new SerializedObject(barrier);
+        so.FindProperty("TeamIndex").intValue = teamIndex;
+        so.ApplyModifiedProperties();
 
         // 4 walls: N, S, E, W   (local coords relative to parent)
         // Each wall: a box collider child with a renderer (disabled by default via SpawnBarrierController.Awake)

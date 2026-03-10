@@ -41,6 +41,12 @@ public class GamePhaseManager : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    public NetworkVariable<bool> BarriersActive = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     // ── Server-only state ─────────────────────────────────────────────────────
 
     private readonly HashSet<ulong> _playersInStartZone = new HashSet<ulong>();
@@ -124,10 +130,12 @@ public class GamePhaseManager : NetworkBehaviour
 
         Phase.Value = GamePhase.InGame;
         TeleportAllPlayersToTeamSpawns();
+        BarriersActive.Value = true;
         SetBarriersRpc(true);
 
         yield return new WaitForSeconds(10f);
 
+        BarriersActive.Value = false;
         SetBarriersRpc(false);
     }
 
@@ -186,12 +194,23 @@ public class GamePhaseManager : NetworkBehaviour
         }
 
         _playersInStartZone.Clear();
+        BarriersActive.Value    = false;
         WinningTeam.Value       = -1;
         PlayersReadyCount.Value = 0;
         Phase.Value             = GamePhase.Lobby;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>Returns the world-space centre of the spawn barrier for the given team, or Vector3.zero if not found.</summary>
+    public Vector3 GetSpawnCenterForTeam(int team)
+    {
+        if (_spawnBarriers == null) return Vector3.zero;
+        foreach (var b in _spawnBarriers)
+            if (b != null && b.TeamIndex == team)
+                return b.transform.position;
+        return Vector3.zero;
+    }
 
     private void TeleportAllPlayersToTeamSpawns()
     {
@@ -203,8 +222,10 @@ public class GamePhaseManager : NetworkBehaviour
             var pc = playerObj.GetComponent<PlayerController>();
             if (pc == null) continue;
 
-            int     team     = pc.TeamIndex.Value;
-            Vector3 spawnPos = PlayerController.RandomSpawnForTeam(team, 1f);
+            int     team   = pc.TeamIndex.Value;
+            Vector3 center = GetSpawnCenterForTeam(team);
+            Vector2 rand   = Random.insideUnitCircle * 2f;
+            Vector3 spawnPos = new Vector3(center.x + rand.x, 1f, center.z + rand.y);
             pc.TeleportTo(spawnPos);
         }
     }

@@ -7,6 +7,8 @@ using UnityEngine;
 /// </summary>
 public class SpawnBarrierController : MonoBehaviour
 {
+    [SerializeField] public int TeamIndex = 0;
+
     private Collider[]  _walls;
     private Renderer[]  _renderers;
 

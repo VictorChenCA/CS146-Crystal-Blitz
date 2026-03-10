@@ -255,6 +255,7 @@ public class PlayerController : NetworkBehaviour
         Vector3 candidate = transform.position + move * moveSpeed * Time.deltaTime;
         bool    inGame    = GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.InGame;
         Vector3 newPos    = inGame ? ClampToLane(candidate) : candidate;
+        newPos = ClampToSpawnBarrier(newPos);
 
         // Preserve the agent's natural Y so it doesn't fight the NavMesh surface
         if (_agent != null && _agent.enabled)
@@ -328,6 +329,7 @@ public class PlayerController : NetworkBehaviour
 
         bool inGame = GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.InGame;
         Vector3 dest = inGame ? ClampToLane(worldPos) : worldPos;
+        dest = ClampToSpawnBarrier(dest);
         _agent.SetDestination(dest);
         ShowClickIndicator(dest);
     }
@@ -336,7 +338,7 @@ public class PlayerController : NetworkBehaviour
     public void SetChaseDestination(Vector3 worldPos)
     {
         if (_agent == null || !_agent.enabled) return;
-        _agent.SetDestination(worldPos);
+        _agent.SetDestination(ClampToSpawnBarrier(worldPos));
     }
 
     /// <summary>Cancels any active NavMesh path.</summary>
@@ -347,8 +349,30 @@ public class PlayerController : NetworkBehaviour
     [Rpc(SendTo.Server)]
     private void SubmitPositionServerRpc(Vector3 newPosition, RpcParams rpcParams = default)
     {
+        newPosition        = ClampToSpawnBarrier(newPosition);
         transform.position = newPosition;
         Position.Value     = newPosition;
+    }
+
+    // ── Spawn barrier clamping ────────────────────────────────────────────────
+
+    // Half the interior size of each barrier box (walls at ±5, 0.4 thick → interior ±4.8).
+    private const float BarrierHalf = 4.6f;
+
+    private Vector3 ClampToSpawnBarrier(Vector3 pos)
+    {
+        var gpm = GamePhaseManager.Instance;
+        if (gpm == null || !gpm.BarriersActive.Value) return pos;
+
+        int team = TeamIndex.Value;
+        if (team < 0) return pos;
+
+        Vector3 center = gpm.GetSpawnCenterForTeam(team);
+        if (center == Vector3.zero) return pos;   // barrier not found — don't clamp
+
+        pos.x = Mathf.Clamp(pos.x, center.x - BarrierHalf, center.x + BarrierHalf);
+        pos.z = Mathf.Clamp(pos.z, center.z - BarrierHalf, center.z + BarrierHalf);
+        return pos;
     }
 
     // ── Lane clamping ─────────────────────────────────────────────────────────

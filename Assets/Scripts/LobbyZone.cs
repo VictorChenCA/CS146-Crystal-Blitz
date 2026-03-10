@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
 /// <summary>
-/// Trigger zones in the lobby area. Only server processes trigger callbacks.
+/// Lobby trigger zone. Uses Physics.OverlapSphere polling (server-only) so
+/// it works without a Rigidbody on either the zone or the player.
 /// </summary>
 public class LobbyZone : MonoBehaviour
 {
@@ -10,16 +12,51 @@ public class LobbyZone : MonoBehaviour
 
     [SerializeField] public ZoneType zoneType;
 
-    private static readonly Color BlueColor = new Color(0.2f, 0.5f, 1f);
-    private static readonly Color RedColor  = new Color(1f, 0.25f, 0.25f);
+    private SphereCollider        _col;
+    private readonly HashSet<ulong> _occupants = new HashSet<ulong>();
 
-    private void OnTriggerEnter(Collider other)
+    private void Awake()
     {
-        if (!NetworkManager.Singleton.IsServer) return;
+        _col = GetComponent<SphereCollider>();
+    }
 
-        var pc = other.GetComponent<PlayerController>();
-        if (pc == null) return;
+    private void Update()
+    {
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
+        if (_col == null) return;
 
+        // World-space centre and radius (accounts for non-uniform scale on the collider's transform)
+        Vector3 worldCenter = transform.TransformPoint(_col.center);
+        float   worldRadius = _col.radius * Mathf.Max(
+            transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z);
+
+        Collider[] hits = Physics.OverlapSphere(worldCenter, worldRadius);
+
+        // Detect who is currently inside
+        var current = new HashSet<ulong>();
+        foreach (var hit in hits)
+        {
+            var pc = hit.GetComponent<PlayerController>();
+            if (pc == null) continue;
+            current.Add(pc.OwnerClientId);
+
+            if (!_occupants.Contains(pc.OwnerClientId))
+                OnPlayerEntered(pc);
+        }
+
+        // Detect who just left
+        foreach (ulong id in _occupants)
+        {
+            if (!current.Contains(id))
+                OnPlayerExited(id);
+        }
+
+        _occupants.Clear();
+        foreach (ulong id in current) _occupants.Add(id);
+    }
+
+    private void OnPlayerEntered(PlayerController pc)
+    {
         switch (zoneType)
         {
             case ZoneType.BlueTeam:
@@ -31,11 +68,8 @@ public class LobbyZone : MonoBehaviour
                 break;
 
             case ZoneType.StartGame:
-                if (GamePhaseManager.Instance != null &&
-                    GamePhaseManager.Instance.Phase.Value == GamePhaseManager.GamePhase.Lobby)
-                {
+                if (GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Lobby)
                     GamePhaseManager.Instance.PlayerEnteredStartZone(pc.OwnerClientId);
-                }
                 break;
 
             case ZoneType.CharSelect1:
@@ -48,14 +82,9 @@ public class LobbyZone : MonoBehaviour
         }
     }
 
-    private void OnTriggerExit(Collider other)
+    private void OnPlayerExited(ulong clientId)
     {
-        if (!NetworkManager.Singleton.IsServer) return;
         if (zoneType != ZoneType.StartGame) return;
-
-        var pc = other.GetComponent<PlayerController>();
-        if (pc == null) return;
-
-        GamePhaseManager.Instance?.PlayerLeftStartZone(pc.OwnerClientId);
+        GamePhaseManager.Instance?.PlayerLeftStartZone(clientId);
     }
 }
