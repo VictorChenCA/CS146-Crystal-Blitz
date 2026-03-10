@@ -10,16 +10,18 @@ public class HomingProjectileController : NetworkBehaviour
 {
     [SerializeField] private float hitRadius = 0.7f;
 
-    private PlayerHealth _target;
-    private float        _speed;
-    private ulong        _shooterClientId;
-    private float        _damage;
-    private bool         _initialized;
+    private IDamageable _target;
+    private Transform   _targetTransform;
+    private float       _speed;
+    private ulong       _shooterClientId;
+    private float       _damage;
+    private bool        _initialized;
 
     /// <summary>Called by the server immediately after Spawn().</summary>
-    public void Initialize(PlayerHealth target, float speed, ulong shooterClientId, float damage)
+    public void Initialize(IDamageable target, Transform targetTransform, float speed, ulong shooterClientId, float damage)
     {
         _target          = target;
+        _targetTransform = targetTransform;
         _speed           = speed;
         _shooterClientId = shooterClientId;
         _damage          = damage;
@@ -31,13 +33,13 @@ public class HomingProjectileController : NetworkBehaviour
         if (!IsServer || !_initialized) return;
 
         // Target gone → despawn
-        if (_target == null || !_target.gameObject.activeInHierarchy)
+        if (_target == null || _targetTransform == null || !_targetTransform.gameObject.activeInHierarchy)
         {
             NetworkObject.Despawn(true);
             return;
         }
 
-        Vector3 targetPos = _target.transform.position;
+        Vector3 targetPos = _targetTransform.position;
         float   step      = _speed * Time.deltaTime;
         transform.position = Vector3.MoveTowards(transform.position, targetPos, step);
 

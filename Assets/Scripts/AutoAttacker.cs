@@ -96,18 +96,8 @@ public class AutoAttacker : NetworkBehaviour
 
     private void UpdateHoverDetection()
     {
-        // No targeting during lobby or countdown
-        if (GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Lobby ||
-            GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Countdown)
-        {
-            if (_hoveredEnemy != null)
-            {
-                _hoveredEnemy       = null;
-                _attackCursorActive = false;
-                Cursor.SetCursor(_cursorDefault, new Vector2(8f, 8f), CursorMode.Auto);
-            }
-            return;
-        }
+        bool isPreGame = GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Lobby ||
+                         GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Countdown;
 
         Vector2 mousePos = Mouse.current.position.ReadValue();
         Ray     ray      = _mainCamera.ScreenPointToRay(new Vector3(mousePos.x, mousePos.y, 0f));
@@ -118,16 +108,31 @@ public class AutoAttacker : NetworkBehaviour
         RaycastHit[] hits = Physics.RaycastAll(ray, 200f);
         foreach (var hit in hits)
         {
-            var pc = hit.collider.GetComponent<PlayerController>();
-            if (pc != null && pc != _pc && pc.TeamIndex.Value != myTeam)
+            // Training dummy — always targetable (lobby practice)
+            var dummy = hit.collider.GetComponentInParent<TrainingDummy>();
+            if (dummy != null)
             {
-                _hoveredEnemy = hit.collider.transform;
+                _hoveredEnemy = dummy.transform;
                 break;
             }
-            // Training dummy is also a valid hover target
-            if (hit.collider.GetComponent<TrainingDummy>() != null)
+
+            if (isPreGame) continue;
+
+            // Enemy player (alive) — in-game only
+            var pc = hit.collider.GetComponentInParent<PlayerController>();
+            if (pc != null && pc != _pc && pc.TeamIndex.Value != myTeam)
             {
-                _hoveredEnemy = hit.collider.transform;
+                var ph = pc.GetComponent<PlayerHealth>();
+                if (ph == null || ph.IsDead) continue;
+                _hoveredEnemy = pc.transform;
+                break;
+            }
+
+            // Enemy structure (tower / crystal) — in-game only
+            var sh = hit.collider.GetComponentInParent<StructureHealth>();
+            if (sh != null && sh.TeamIndex != myTeam && sh.IsAlive.Value)
+            {
+                _hoveredEnemy = sh.transform;
                 break;
             }
         }
@@ -151,13 +156,8 @@ public class AutoAttacker : NetworkBehaviour
     /// </summary>
     public bool TryHandleRightClick(bool isNewPress, bool isShift = false)
     {
-        // No attack targeting during lobby or countdown
-        if (GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Lobby ||
-            GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Countdown)
-        {
-            _hoveredEnemy = null;
-            return false;
-        }
+        bool isPreGame = GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Lobby ||
+                         GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.Countdown;
 
         // ── Attack move: Shift + right-click in P&C mode ──────────────────────
         if (isShift && isNewPress && !GameSettings.UseWasd)
@@ -187,6 +187,13 @@ public class AutoAttacker : NetworkBehaviour
 
         // ── Normal: hovering an enemy ─────────────────────────────────────────
         if (_hoveredEnemy == null) return false;
+
+        // During lobby/countdown only the training dummy is targetable
+        if (isPreGame && _hoveredEnemy.GetComponent<TrainingDummy>() == null)
+        {
+            _hoveredEnemy = null;
+            return false;
+        }
 
         // While hovering an enemy, consume the input even on hold to prevent
         // movement orders from firing simultaneously.
@@ -324,27 +331,25 @@ public class AutoAttacker : NetworkBehaviour
     [ServerRpc]
     private void FireAutoAttackServerRpc(ulong targetNetObjId, float dmg)
     {
-        if (autoAttackProjectilePrefab == null) return;
-
         if (!NetworkManager.Singleton.SpawnManager.SpawnedObjects
                 .TryGetValue(targetNetObjId, out var targetNetObj)) return;
 
-        var targetHealth = targetNetObj.GetComponent<PlayerHealth>();
-        if (targetHealth != null)
+        var damageable = targetNetObj.GetComponent<IDamageable>();
+        if (damageable == null || damageable.IsImmuneTo(OwnerClientId)) return;
+
+        if (autoAttackProjectilePrefab != null)
         {
-            // Homing projectile for players
+            // Homing projectile toward any IDamageable target
             GameObject proj   = Instantiate(autoAttackProjectilePrefab, transform.position, Quaternion.identity);
             var        netObj = proj.GetComponent<NetworkObject>();
             netObj.Spawn(true);
             var controller = proj.GetComponent<HomingProjectileController>();
-            controller.Initialize(targetHealth, projectileSpeed, OwnerClientId, dmg);
+            controller.Initialize(damageable, targetNetObj.transform, projectileSpeed, OwnerClientId, dmg);
             return;
         }
 
-        // Direct damage for non-player targets (e.g. TrainingDummy)
-        var damageable = targetNetObj.GetComponent<IDamageable>();
-        if (damageable != null && !damageable.IsImmuneTo(OwnerClientId))
-            damageable.TakeDamage(dmg, OwnerClientId);
+        // No prefab assigned — fall back to instant damage
+        damageable.TakeDamage(dmg, OwnerClientId);
     }
 
     // ── Attack-move helpers ───────────────────────────────────────────────────
@@ -373,6 +378,8 @@ public class AutoAttacker : NetworkBehaviour
         {
             if (pc == _pc) continue;
             if (pc.TeamIndex.Value == myTeam) continue;
+            var ph = pc.GetComponent<PlayerHealth>();
+            if (ph != null && ph.IsDead) continue;
             float dist = Vector3.Distance(worldPos, pc.transform.position);
             if (dist <= radius && dist < nearestDist)
             {
@@ -381,7 +388,7 @@ public class AutoAttacker : NetworkBehaviour
             }
         }
 
-        // Training dummy is always a valid target
+        // Training dummy
         var dummy = TrainingDummy.Instance;
         if (dummy != null)
         {
@@ -389,6 +396,18 @@ public class AutoAttacker : NetworkBehaviour
             if (dist <= radius && dist < nearestDist)
             {
                 nearest = dummy.transform;
+                nearestDist = dist;
+            }
+        }
+
+        // Enemy structures (towers / crystals)
+        foreach (var sh in FindObjectsByType<StructureHealth>(FindObjectsSortMode.None))
+        {
+            if (sh.TeamIndex == myTeam || !sh.IsAlive.Value) continue;
+            float dist = Vector3.Distance(worldPos, sh.transform.position);
+            if (dist <= radius && dist < nearestDist)
+            {
+                nearest = sh.transform;
                 nearestDist = dist;
             }
         }

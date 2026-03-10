@@ -118,7 +118,7 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.5
+  m_Radius: 0.6
   m_Height: 2
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
@@ -208,15 +208,14 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   moveSpeed: 8
   groundY: 1
-  minLane: -49
-  maxLane: 49
-  halfLaneWidth: 14
   Position:
     m_InternalValue: {x: 0, y: 0, z: 0}
   TeamIndex:
     m_InternalValue: 0
   PlayerColor:
     m_InternalValue: {r: 1, g: 1, b: 1, a: 1}
+  CharacterIndex:
+    m_InternalValue: 0
 --- !u!114 &9065941875211792016
 MonoBehaviour:
   m_ObjectHideFlags: 0
