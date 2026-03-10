@@ -22,6 +22,7 @@ public class ProjectileController : NetworkBehaviour
     // Called by server after NetworkObject.Spawn()
     public void Initialize(Vector3 endPosition, float speed, ulong shooterClientId, float damage)
     {
+        endPosition.y    = transform.position.y;  // lock to spawn height — XZ travel only
         _netEndPos.Value = endPosition;
         _netSpeed.Value  = speed;
         _shooterClientId = shooterClientId;

@@ -124,15 +124,19 @@ public class ProjectileShooter : NetworkBehaviour
     private IEnumerator AttackSequence(Vector3 targetPos)
     {
         var pc = GetComponent<PlayerController>();
-        pc?.LockMovement(castDelay + animationDelay);
         GetComponent<AutoAttacker>()?.CancelAutoAttack();
         GetComponent<TripleShotAbility>()?.CancelCharge();
+        pc?.LockMovement(castDelay + animationDelay);
+        pc?.StopNavMovement();
 
         // Compute offset start position toward target
         Vector3 castDir   = targetPos - firePoint.position;
         castDir.y = 0f;
         castDir   = castDir.magnitude > 0.001f ? castDir.normalized : firePoint.forward;
-        Vector3 startPos  = firePoint.position + castDir * launchOffset;
+        Vector3 startPos  = new Vector3(
+            firePoint.position.x + castDir.x * launchOffset,
+            firePoint.position.y,
+            firePoint.position.z + castDir.z * launchOffset);
 
         // Phase 1: Cast (0.25 s) — local preview sphere grows from 0 to full size
         Vector3 fullScale = projectilePrefab != null

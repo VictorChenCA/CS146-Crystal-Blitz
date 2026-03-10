@@ -153,7 +153,10 @@ public class TripleShotAbility : NetworkBehaviour
         // Fire 3 projectiles in sequence
         for (int i = 0; i < 3; i++)
         {
-            Vector3 startPos = firePoint.position + dir * launchOffset;
+            Vector3 startPos = new Vector3(
+                firePoint.position.x + dir.x * launchOffset,
+                firePoint.position.y,
+                firePoint.position.z + dir.z * launchOffset);
             Vector3 endPos   = new Vector3(
                 firePoint.position.x + dir.x * maxRange,
                 firePoint.position.y,
