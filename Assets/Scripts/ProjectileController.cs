@@ -85,6 +85,21 @@ public class ProjectileController : NetworkBehaviour
             }
         }
 
+        // Check for minions
+        foreach (var mh in FindObjectsByType<MinionHealth>(FindObjectsSortMode.None))
+        {
+            if (mh.Health.Value <= 0f) continue;
+            if (Vector3.Distance(transform.position, mh.transform.position) < hitRadius)
+            {
+                if (!mh.IsImmuneTo(_shooterClientId))
+                {
+                    mh.TakeDamage(_damage, _shooterClientId);
+                    NetworkObject.Despawn(true);
+                    return;
+                }
+            }
+        }
+
         if (Vector3.Distance(transform.position, _netEndPos.Value) < 0.01f)
             NetworkObject.Despawn(true);
     }
