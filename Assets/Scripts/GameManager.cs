@@ -663,6 +663,7 @@ public class GameManager : MonoBehaviour
         var health      = localObj.GetComponent<PlayerHealth>();
         var shooter     = localObj.GetComponent<ProjectileShooter>();
         var tripleShot  = localObj.GetComponent<TripleShotAbility>();
+        var dash        = localObj.GetComponent<DashAbility>();
         var pc          = localObj.GetComponent<PlayerController>();
 
         // ── Layout constants (scaled) ─────────────────────────────────────
@@ -744,9 +745,29 @@ public class GameManager : MonoBehaviour
                   keybind1, _levelStyle);
         _levelStyle.alignment = TextAnchor.UpperCenter;
 
-        // ── Ability 2 — placeholder ───────────────────────────────────────
-        DrawRect(abX + abilitySize + abilityGap, colTop, abilitySize, abilitySize,
-                 new Color(0.12f, 0.12f, 0.12f, 0.92f));
+        // ── Ability 2 — dash ─────────────────────────────────────────────
+        float ab2X    = abX + abilitySize + abilityGap;
+        float dashCD  = dash != null ? dash.CooldownFraction  : 0f;
+        float dashCDR = dash != null ? dash.CooldownRemaining : 0f;
+        DrawRect(ab2X, colTop, abilitySize, abilitySize, new Color(0.12f, 0.12f, 0.12f, 0.92f));
+
+        if (dash != null && dash.IsAiming)
+            DrawRect(ab2X, colTop, abilitySize, abilitySize, new Color(1f, 1f, 1f, 0.2f));
+        else if (dashCD > 0.01f)
+        {
+            DrawRect(ab2X, colTop + abilitySize * (1f - dashCD), abilitySize, dashCD * abilitySize,
+                     new Color(0f, 0f, 0f, 0.5f));
+            _levelStyle.fontSize = Mathf.RoundToInt(16f * s);
+            GUI.Label(new Rect(ab2X, colTop, abilitySize, abilitySize),
+                      dashCDR.ToString("0.0"), _levelStyle);
+        }
+
+        string keybind2 = GameSettings.UseWasd ? "Shift" : "W";
+        _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
+        _levelStyle.alignment = TextAnchor.LowerLeft;
+        GUI.Label(new Rect(ab2X + 3f * s, colTop, abilitySize - 3f * s, abilitySize - 3f * s),
+                  keybind2, _levelStyle);
+        _levelStyle.alignment = TextAnchor.UpperCenter;
 
         // ── Ability 3 — triple shot ───────────────────────────────────────
         float ab3X  = abX + (abilitySize + abilityGap) * 2f;

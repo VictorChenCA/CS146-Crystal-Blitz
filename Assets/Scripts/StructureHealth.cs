@@ -97,6 +97,9 @@ public class StructureHealth : NetworkBehaviour, IDamageable
 
         var col = GetComponent<Collider>();
         if (col != null) col.enabled = alive;
+
+        for (int i = 0; i < transform.childCount; i++)
+            transform.GetChild(i).gameObject.SetActive(alive);
     }
 
     // ── Health bar (screen-space OnGUI) ──────────────────────────────────────

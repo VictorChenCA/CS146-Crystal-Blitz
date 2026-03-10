@@ -74,6 +74,7 @@ public class ProjectileShooter : NetworkBehaviour
         {
             _charging = true;
             GetComponent<TripleShotAbility>()?.CancelCharge();
+            GetComponent<DashAbility>()?.CancelAim();
         }
 
         if (_charging)

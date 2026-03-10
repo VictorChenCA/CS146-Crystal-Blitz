@@ -152,4 +152,4 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ProjectileController
   ShowTopMostFoldoutHeaderGroup: 1
-  hitRadius: 1.6
+  hitRadius: 2.5

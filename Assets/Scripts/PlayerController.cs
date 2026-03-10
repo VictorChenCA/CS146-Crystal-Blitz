@@ -14,6 +14,9 @@ public class PlayerController : NetworkBehaviour
     private static readonly Vector3 MoveForward = new Vector3(1f, 0f, 1f).normalized;
     private static readonly Vector3 MoveRight   = new Vector3(1f, 0f, -1f).normalized;
 
+    // ── Last move direction (used by DashAbility fallback) ───────────────────
+    public Vector3 LastMoveDirection { get; private set; } = new Vector3(1f, 0f, 1f).normalized;
+
     // ── Movement lock (used by ProjectileShooter / AutoAttacker) ─────────────
     private float _movementLockUntil;
 
@@ -272,6 +275,7 @@ public class PlayerController : NetworkBehaviour
         _agent?.ResetPath();
 
         Vector3 move   = (MoveForward * fwdInput + MoveRight * rightInput).normalized;
+        LastMoveDirection = move;
         Vector3 newPos = transform.position + move * moveSpeed * Time.deltaTime;
 
         // Preserve the agent's natural Y so it doesn't fight the NavMesh surface
@@ -378,6 +382,9 @@ public class PlayerController : NetworkBehaviour
 
     /// <summary>Cancels any active NavMesh path.</summary>
     public void StopNavMovement() => _agent?.ResetPath();
+
+    /// <summary>Immediately submits a position to the server (used by DashAbility).</summary>
+    public void ForceSubmitPosition(Vector3 pos) => SubmitPositionServerRpc(pos);
 
     // ── Server RPC ────────────────────────────────────────────────────────────
 
