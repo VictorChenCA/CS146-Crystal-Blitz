@@ -52,7 +52,6 @@ public class GamePhaseManager : NetworkBehaviour
     // ── Lobby spawn ───────────────────────────────────────────────────────────
 
     private static readonly Vector3 LobbySpawnCenter = new Vector3(0f, 1f, 100f);
-    private const float LobbySpawnRadius = 3f;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -160,9 +159,7 @@ public class GamePhaseManager : NetworkBehaviour
         {
             var pc = client.PlayerObject?.GetComponent<PlayerController>();
             if (pc == null) continue;
-            Vector2 rand     = Random.insideUnitCircle * LobbySpawnRadius;
-            Vector3 lobbyPos = LobbySpawnCenter + new Vector3(rand.x, 0f, rand.y);
-            pc.TeleportTo(lobbyPos);
+            pc.TeleportTo(LobbySpawnCenter);
             pc.SetTeamServerSide(-1);
         }
 
@@ -205,10 +202,8 @@ public class GamePhaseManager : NetworkBehaviour
 
         Transform t      = go.transform;
         // Unity cylinder mesh: height = 2, radius = 0.5 at scale (1,1,1)
-        float topY       = t.position.y + t.lossyScale.y;   // top surface Y
-        float radius     = t.lossyScale.x * 0.5f;
-        Vector2 rand     = Random.insideUnitCircle * radius;
-        return new Vector3(t.position.x + rand.x, topY, t.position.z + rand.y);
+        float topY = t.position.y + t.lossyScale.y;   // top surface Y
+        return new Vector3(t.position.x, topY, t.position.z);
     }
 
     private void TeleportAllPlayersToTeamSpawns()

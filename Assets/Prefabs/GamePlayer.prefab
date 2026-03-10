@@ -234,7 +234,7 @@ MonoBehaviour:
   projectilePrefab: {fileID: 8423999069295360159, guid: f4921cec9c8854c1b8e3a9d919bbe75f, type: 3}
   firePoint: {fileID: 8689417454509932622}
   projectileSpeed: 26
-  maxRange: 20
+  maxRange: 18
   damage: 45
   fireCooldown: 1.5
   castDelay: 0.4
@@ -253,10 +253,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
   ShowTopMostFoldoutHeaderGroup: 1
-  maxHealth: 140
+  maxHealth: 150
   respawnDelay: 5
   Health:
-    m_InternalValue: 140
+    m_InternalValue: 150
   passiveRegenPerSecond: 2
   spawnRegenPerTick: 10
   spawnRegenTickRate: 4
@@ -273,11 +273,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AutoAttacker
   ShowTopMostFoldoutHeaderGroup: 1
-  autoAttackRange: 12
+  autoAttackRange: 9
   autoAttackCooldown: 1
-  windUpDuration: 0.2
+  windUpDuration: 0.25
   projectileSpeed: 18
-  damage: 25
+  damage: 20
   autoAttackProjectilePrefab: {fileID: 8423999069295360159, guid: b1004cecac4544e1886d85389e4a8b7f, type: 3}
 --- !u!195 &-4491582939355880280
 NavMeshAgent:
@@ -316,8 +316,8 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   projectilePrefab: {fileID: 8423999069295360159, guid: 45d6fab729d164120b928c683db062bc, type: 3}
   firePoint: {fileID: 8689417454509932622}
-  projectileSpeed: 15
-  maxRange: 16
+  projectileSpeed: 20
+  maxRange: 15
   damage: 20
   cooldown: 4
   delayBetweenShots: 0.15

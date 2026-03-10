@@ -274,7 +274,15 @@ public class AutoAttacker : NetworkBehaviour
             {
                 if (_target == null || !_targetNetObj.IsSpawned) yield break;
                 if (GameSettings.UseWasd && HasWasdInput()) { CancelAutoAttack(); yield break; }
+                if (Vector3.Distance(transform.position, _target.position) > autoAttackRange) break;
                 yield return null;
+            }
+
+            // If target fled during cooldown wait, resume chase
+            if (_target != null && Vector3.Distance(transform.position, _target.position) > autoAttackRange)
+            {
+                _pc?.SetChaseDestination(_target.position);
+                continue;
             }
 
             // Wind-up: tint builds 0→1 over windUpDuration
@@ -300,7 +308,21 @@ public class AutoAttacker : NetworkBehaviour
                     yield break;
                 }
 
+                if (Vector3.Distance(transform.position, _target.position) > autoAttackRange)
+                {
+                    _pc?.CancelMovementLock();
+                    StartTintFadeOut();
+                    break;
+                }
+
                 yield return null;
+            }
+
+            // If target fled during wind-up, resume chase (skip fire)
+            if (_target != null && Vector3.Distance(transform.position, _target.position) > autoAttackRange)
+            {
+                _pc?.SetChaseDestination(_target.position);
+                continue;
             }
 
             if (_target == null || !_targetNetObj.IsSpawned)

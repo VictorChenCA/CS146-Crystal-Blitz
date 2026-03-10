@@ -157,7 +157,7 @@ public class DashAbility : NetworkBehaviour
         Vector3 endPos      = startPos;
 
         if (NavMesh.SamplePosition(rawEnd, out NavMeshHit hit, dashDistance, NavMesh.AllAreas))
-            endPos = hit.position;
+            endPos = new Vector3(hit.position.x, startPos.y, hit.position.z);
 
         float totalDur = dashDuration + castLockDuration;
         _pc?.LockMovement(totalDur);
