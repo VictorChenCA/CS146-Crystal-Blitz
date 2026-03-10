@@ -8,14 +8,11 @@ public class PlayerController : NetworkBehaviour
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 8f;
 
-    [Header("Lane Boundaries")]
     [SerializeField] private float groundY = 1f;
-    [SerializeField] private float minLane = -30f;
-    [SerializeField] private float maxLane = 30f;
-    [SerializeField] private float halfLaneWidth = 3f;
 
-    private static readonly Vector3 LaneForward = new Vector3(1f, 0f, 1f).normalized;
-    private static readonly Vector3 LaneRight   = new Vector3(1f, 0f, -1f).normalized;
+    // Isometric movement axes (match camera rotation 45,45,0)
+    private static readonly Vector3 MoveForward = new Vector3(1f, 0f, 1f).normalized;
+    private static readonly Vector3 MoveRight   = new Vector3(1f, 0f, -1f).normalized;
 
     // ── Movement lock (used by ProjectileShooter / AutoAttacker) ─────────────
     private float _movementLockUntil;
@@ -251,11 +248,8 @@ public class PlayerController : NetworkBehaviour
 
         _agent?.ResetPath();
 
-        Vector3 move      = (LaneForward * fwdInput + LaneRight * rightInput).normalized;
-        Vector3 candidate = transform.position + move * moveSpeed * Time.deltaTime;
-        bool    inGame    = GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.InGame;
-        Vector3 newPos    = inGame ? ClampToLane(candidate) : candidate;
-        newPos = ClampToSpawnBarrier(newPos);
+        Vector3 move   = (MoveForward * fwdInput + MoveRight * rightInput).normalized;
+        Vector3 newPos = transform.position + move * moveSpeed * Time.deltaTime;
 
         // Preserve the agent's natural Y so it doesn't fight the NavMesh surface
         if (_agent != null && _agent.enabled)
@@ -327,18 +321,15 @@ public class PlayerController : NetworkBehaviour
         if (_agent == null || !_agent.enabled) return;
         if (Time.time < _movementLockUntil) return;
 
-        bool inGame = GamePhaseManager.Instance?.Phase.Value == GamePhaseManager.GamePhase.InGame;
-        Vector3 dest = inGame ? ClampToLane(worldPos) : worldPos;
-        dest = ClampToSpawnBarrier(dest);
-        _agent.SetDestination(dest);
-        ShowClickIndicator(dest);
+        _agent.SetDestination(worldPos);
+        ShowClickIndicator(worldPos);
     }
 
     /// <summary>AA-commanded chase: no lane clamp, no indicator.</summary>
     public void SetChaseDestination(Vector3 worldPos)
     {
         if (_agent == null || !_agent.enabled) return;
-        _agent.SetDestination(ClampToSpawnBarrier(worldPos));
+        _agent.SetDestination(worldPos);
     }
 
     /// <summary>Cancels any active NavMesh path.</summary>
@@ -349,42 +340,11 @@ public class PlayerController : NetworkBehaviour
     [Rpc(SendTo.Server)]
     private void SubmitPositionServerRpc(Vector3 newPosition, RpcParams rpcParams = default)
     {
-        newPosition        = ClampToSpawnBarrier(newPosition);
         transform.position = newPosition;
         Position.Value     = newPosition;
     }
 
     // ── Spawn barrier clamping ────────────────────────────────────────────────
-
-    // Half the interior size of each barrier box (walls at ±5, 0.4 thick → interior ±4.8).
-    private const float BarrierHalf = 4.6f;
-
-    private Vector3 ClampToSpawnBarrier(Vector3 pos)
-    {
-        var gpm = GamePhaseManager.Instance;
-        if (gpm == null || !gpm.BarriersActive.Value) return pos;
-
-        int team = TeamIndex.Value;
-        if (team < 0) return pos;
-
-        Vector3 center = gpm.GetSpawnCenterForTeam(team);
-        if (center == Vector3.zero) return pos;   // barrier not found — don't clamp
-
-        pos.x = Mathf.Clamp(pos.x, center.x - BarrierHalf, center.x + BarrierHalf);
-        pos.z = Mathf.Clamp(pos.z, center.z - BarrierHalf, center.z + BarrierHalf);
-        return pos;
-    }
-
-    // ── Lane clamping ─────────────────────────────────────────────────────────
-
-    private Vector3 ClampToLane(Vector3 pos)
-    {
-        float fwd   = Mathf.Clamp(Vector3.Dot(pos, LaneForward), minLane, maxLane);
-        float right = Mathf.Clamp(Vector3.Dot(pos, LaneRight), -halfLaneWidth, halfLaneWidth);
-        Vector3 clamped = LaneForward * fwd + LaneRight * right;
-        clamped.y = groundY;
-        return clamped;
-    }
 
     // ── Click indicator ───────────────────────────────────────────────────────
 
@@ -445,19 +405,4 @@ public class PlayerController : NetworkBehaviour
         _clickIndicator.material.color = new Color(1f, 1f, 1f, alpha);
     }
 
-    // ── Gizmos ────────────────────────────────────────────────────────────────
-
-    private void OnDrawGizmos()
-    {
-        Gizmos.color = new Color(0f, 1f, 0f, 0.4f);
-
-        Vector3 center = LaneForward * ((minLane + maxLane) * 0.5f);
-        center.y = groundY;
-        Quaternion rot = Quaternion.LookRotation(LaneForward, Vector3.up);
-
-        Matrix4x4 prev = Gizmos.matrix;
-        Gizmos.matrix = Matrix4x4.TRS(center, rot, Vector3.one);
-        Gizmos.DrawWireCube(Vector3.zero, new Vector3(halfLaneWidth * 2f, 0.1f, maxLane - minLane));
-        Gizmos.matrix = prev;
-    }
 }

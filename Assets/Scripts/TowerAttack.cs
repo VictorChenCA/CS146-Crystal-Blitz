@@ -68,6 +68,19 @@ public class TowerAttack : NetworkBehaviour
         _lineRenderer.enabled = false;
     }
 
+    private void OnDrawGizmosSelected()
+    {
+        Gizmos.color = teamIndex == 0
+            ? new Color(0.35f, 0.6f, 1f, 0.35f)
+            : new Color(1f, 0.35f, 0.35f, 0.35f);
+        Gizmos.DrawSphere(transform.position, range);
+
+        Gizmos.color = teamIndex == 0
+            ? new Color(0.35f, 0.6f, 1f, 1f)
+            : new Color(1f, 0.35f, 0.35f, 1f);
+        Gizmos.DrawWireSphere(transform.position, range);
+    }
+
     private PlayerHealth FindNearestEnemy()
     {
         PlayerHealth nearest    = null;

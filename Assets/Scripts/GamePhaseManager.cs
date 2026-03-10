@@ -41,22 +41,15 @@ public class GamePhaseManager : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
-    public NetworkVariable<bool> BarriersActive = new NetworkVariable<bool>(
-        false,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
-
     // ── Server-only state ─────────────────────────────────────────────────────
 
     private readonly HashSet<ulong> _playersInStartZone = new HashSet<ulong>();
 
     // ── Inspector references ──────────────────────────────────────────────────
 
-    [SerializeField] private SpawnBarrierController[] _spawnBarriers;
-    [SerializeField] public  StructureHealth[]        _allStructures;
+    [SerializeField] public StructureHealth[] _allStructures;
 
-    // ── Lobby spawn rect ──────────────────────────────────────────────────────
+    // ── Lobby spawn ───────────────────────────────────────────────────────────
 
     private static readonly Vector3 LobbySpawnCenter = new Vector3(0f, 1f, 100f);
     private const float LobbySpawnRadius = 3f;
@@ -66,21 +59,15 @@ public class GamePhaseManager : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         Instance = this;
-
         if (IsServer)
-        {
             NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
-        }
     }
 
     public override void OnNetworkDespawn()
     {
         if (Instance == this) Instance = null;
-
         if (IsServer)
-        {
             NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
-        }
     }
 
     // ── Start zone tracking (called by LobbyZone on server) ──────────────────
@@ -112,7 +99,6 @@ public class GamePhaseManager : NetworkBehaviour
     private void CheckGameStart()
     {
         if (!IsServer || Phase.Value != GamePhase.Lobby) return;
-
         int totalClients = NetworkManager.Singleton.ConnectedClientsList.Count;
         if (totalClients < 1) return;
         if (_playersInStartZone.Count >= totalClients)
@@ -123,20 +109,14 @@ public class GamePhaseManager : NetworkBehaviour
 
     private IEnumerator StartGameSequence()
     {
-        Phase.Value           = GamePhase.Countdown;
+        Phase.Value            = GamePhase.Countdown;
         CountdownEndTime.Value = Time.time + 3f;
 
         yield return new WaitForSeconds(3f);
 
         Phase.Value = GamePhase.InGame;
+        AssignTeamsToUnassignedPlayers();
         TeleportAllPlayersToTeamSpawns();
-        BarriersActive.Value = true;
-        SetBarriersRpc(true);
-
-        yield return new WaitForSeconds(10f);
-
-        BarriersActive.Value = false;
-        SetBarriersRpc(false);
     }
 
     // ── Win / game over ───────────────────────────────────────────────────────
@@ -148,9 +128,8 @@ public class GamePhaseManager : NetworkBehaviour
         Phase.Value       = GamePhase.GameOver;
         WinningTeam.Value = winningTeam;
 
-        // Find the destroyed crystal position for the camera pan
         Vector3 crystalPos = Vector3.zero;
-        int     losingTeam  = winningTeam == 0 ? 1 : 0;
+        int     losingTeam = winningTeam == 0 ? 1 : 0;
         foreach (var s in _allStructures)
         {
             if (s.IsCrystal && s.TeamIndex == losingTeam)
@@ -174,27 +153,20 @@ public class GamePhaseManager : NetworkBehaviour
     {
         if (!IsServer) return;
 
-        // Reset all structures
         foreach (var s in _allStructures)
             s.ResetStructure();
 
-        // Teleport all players to lobby and reset their team
         foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
         {
-            var playerObj = client.PlayerObject;
-            if (playerObj == null) continue;
-
-            var pc = playerObj.GetComponent<PlayerController>();
+            var pc = client.PlayerObject?.GetComponent<PlayerController>();
             if (pc == null) continue;
-
-            Vector2 rand    = Random.insideUnitCircle * LobbySpawnRadius;
+            Vector2 rand     = Random.insideUnitCircle * LobbySpawnRadius;
             Vector3 lobbyPos = LobbySpawnCenter + new Vector3(rand.x, 0f, rand.y);
             pc.TeleportTo(lobbyPos);
             pc.SetTeamServerSide(-1);
         }
 
         _playersInStartZone.Clear();
-        BarriersActive.Value    = false;
         WinningTeam.Value       = -1;
         PlayersReadyCount.Value = 0;
         Phase.Value             = GamePhase.Lobby;
@@ -202,43 +174,51 @@ public class GamePhaseManager : NetworkBehaviour
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /// <summary>Returns the world-space centre of the spawn barrier for the given team, or Vector3.zero if not found.</summary>
-    public Vector3 GetSpawnCenterForTeam(int team)
+    /// <summary>Assigns a random team (0 or 1) to any player still showing white (unassigned).</summary>
+    private void AssignTeamsToUnassignedPlayers()
     {
-        if (_spawnBarriers == null) return Vector3.zero;
-        foreach (var b in _spawnBarriers)
-            if (b != null && b.TeamIndex == team)
-                return b.transform.position;
-        return Vector3.zero;
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            var pc = client.PlayerObject?.GetComponent<PlayerController>();
+            if (pc == null) continue;
+            if (pc.PlayerColor.Value == Color.white)
+                pc.SetTeamServerSide(Random.Range(0, 2));
+        }
+    }
+
+    /// <summary>Returns a random point on top of the named spawn cylinder.</summary>
+    private Vector3 RandomPointOnSpawnCylinder(string cylinderName)
+    {
+        var go = GameObject.Find(cylinderName);
+        if (go == null)
+        {
+            Debug.LogWarning($"[GamePhaseManager] Could not find spawn cylinder '{cylinderName}'");
+            return Vector3.zero;
+        }
+
+        Transform t      = go.transform;
+        // Unity cylinder mesh: height = 2, radius = 0.5 at scale (1,1,1)
+        float topY       = t.position.y + t.lossyScale.y;   // top surface Y
+        float radius     = t.lossyScale.x * 0.5f;
+        Vector2 rand     = Random.insideUnitCircle * radius;
+        return new Vector3(t.position.x + rand.x, topY, t.position.z + rand.y);
     }
 
     private void TeleportAllPlayersToTeamSpawns()
     {
         foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
         {
-            var playerObj = client.PlayerObject;
-            if (playerObj == null) continue;
-
-            var pc = playerObj.GetComponent<PlayerController>();
+            var pc = client.PlayerObject?.GetComponent<PlayerController>();
             if (pc == null) continue;
 
-            int     team   = pc.TeamIndex.Value;
-            Vector3 center = GetSpawnCenterForTeam(team);
-            Vector2 rand   = Random.insideUnitCircle * 2f;
-            Vector3 spawnPos = new Vector3(center.x + rand.x, 1f, center.z + rand.y);
+            string cylinderName = pc.TeamIndex.Value == 0 ? "Blue Spawn" : "Red Spawn";
+            Vector3 spawnPos    = RandomPointOnSpawnCylinder(cylinderName);
+            if (spawnPos == Vector3.zero) continue;
             pc.TeleportTo(spawnPos);
         }
     }
 
     // ── RPCs ──────────────────────────────────────────────────────────────────
-
-    [Rpc(SendTo.ClientsAndHost)]
-    private void SetBarriersRpc(bool active)
-    {
-        if (_spawnBarriers == null) return;
-        foreach (var b in _spawnBarriers)
-            b?.SetActive(active);
-    }
 
     [Rpc(SendTo.ClientsAndHost)]
     private void StartWinSequenceRpc(Vector3 crystalPos, int winTeam)

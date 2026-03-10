@@ -120,7 +120,7 @@ public class CameraFollow : MonoBehaviour
 
     // ── Gizmos ────────────────────────────────────────────────────────────────
 
-    private void OnDrawGizmos()
+    private void OnDrawGizmosSelected()
     {
         Vector3    activeRot = ActiveRotation();
         Quaternion rot       = Quaternion.Euler(activeRot);
