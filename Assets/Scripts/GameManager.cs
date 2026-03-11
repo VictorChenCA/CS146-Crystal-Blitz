@@ -325,8 +325,9 @@ public class GameManager : MonoBehaviour
 
     private void DrawMainMenu()
     {
-        float sw = Screen.width;
-        float sh = Screen.height;
+        GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(_guiScale, _guiScale, 1f));
+        float sw = Screen.width  / _guiScale;
+        float sh = Screen.height / _guiScale;
 
         // Title
         float titleW = 600f, titleH = 80f;
@@ -369,6 +370,7 @@ public class GameManager : MonoBehaviour
         if (GUI.Button(new Rect(btnX, btn1Y + 2f * (btnH + btnGap), btnW, btnH), "Quit", _buttonStyle))
             Application.Quit();
 
+        GUI.matrix = Matrix4x4.identity;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1429,6 +1431,17 @@ public class GameManager : MonoBehaviour
     // Relay async helpers
     // ─────────────────────────────────────────────────────────────────────────
 
+#if UNITY_WEBGL
+    private const string RelayConnectionType = "wss";   // browsers require WebSocket
+#else
+    private const string RelayConnectionType = "dtls";  // secure UDP for Editor/Desktop/Server
+#endif
+
+    private void ConfigureTransportForRelay(UnityTransport transport)
+    {
+        transport.UseWebSockets = RelayConnectionType == "wss";
+    }
+
     private async Task InitializeUgsAsync()
     {
         if (UnityServices.State == ServicesInitializationState.Uninitialized)
@@ -1446,8 +1459,9 @@ public class GameManager : MonoBehaviour
         {
             await InitializeUgsAsync();
             var allocation = await RelayService.Instance.CreateAllocationAsync(maxConnections: 3);
-            NetworkManager.Singleton.GetComponent<UnityTransport>()
-                .SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, "dtls"));
+            var hostTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            ConfigureTransportForRelay(hostTransport);
+            hostTransport.SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, RelayConnectionType));
             _joinCode        = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
             _lobbyMessage    = $"Lobby created  •  Join code: {_joinCode}";
             _lobbyMessageEnd = Time.unscaledTime + 8f;
@@ -1471,8 +1485,9 @@ public class GameManager : MonoBehaviour
         {
             await InitializeUgsAsync();
             var allocation = await RelayService.Instance.CreateAllocationAsync(maxConnections: 3);
-            NetworkManager.Singleton.GetComponent<UnityTransport>()
-                .SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, "dtls"));
+            var serverTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            ConfigureTransportForRelay(serverTransport);
+            serverTransport.SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, RelayConnectionType));
             _joinCode        = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
             _lobbyMessage    = $"Server started  •  Join code: {_joinCode}";
             _lobbyMessageEnd = Time.unscaledTime + 8f;
@@ -1496,8 +1511,9 @@ public class GameManager : MonoBehaviour
         {
             await InitializeUgsAsync();
             var allocation = await RelayService.Instance.JoinAllocationAsync(joinCode: joinCode);
-            NetworkManager.Singleton.GetComponent<UnityTransport>()
-                .SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, "dtls"));
+            var clientTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            ConfigureTransportForRelay(clientTransport);
+            clientTransport.SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, RelayConnectionType));
             NetworkManager.Singleton.StartClient();
         }
         catch (System.Exception e)
