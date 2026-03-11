@@ -105,6 +105,12 @@ public class PlayerController : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    public NetworkVariable<Unity.Collections.FixedString64Bytes> PlayerName = new NetworkVariable<Unity.Collections.FixedString64Bytes>(
+        default,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     public override void OnNetworkSpawn()
@@ -146,6 +152,9 @@ public class PlayerController : NetworkBehaviour
             enabled = false;
             return;
         }
+
+        string saved = PlayerPrefs.GetString("playerName", "Player");
+        SubmitNameServerRpc(new Unity.Collections.FixedString64Bytes(saved));
 
         if (_agent != null)
         {
@@ -292,6 +301,12 @@ public class PlayerController : NetworkBehaviour
     private void ChangeTeamServerRpc(int team, RpcParams rpcParams = default)
     {
         TeamIndex.Value = team;
+    }
+
+    [ServerRpc]
+    private void SubmitNameServerRpc(Unity.Collections.FixedString64Bytes name)
+    {
+        PlayerName.Value = name;
     }
 
     // ── WASD movement ─────────────────────────────────────────────────────────

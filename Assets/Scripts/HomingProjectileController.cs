@@ -17,6 +17,12 @@ public class HomingProjectileController : NetworkBehaviour
     private float       _damage;
     private bool        _initialized;
 
+    private NetworkVariable<Vector3> _netPos = new NetworkVariable<Vector3>(
+        default,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     /// <summary>Called by the server immediately after Spawn().</summary>
     public void Initialize(IDamageable target, Transform targetTransform, float speed, ulong shooterClientId, float damage)
     {
@@ -30,30 +36,39 @@ public class HomingProjectileController : NetworkBehaviour
 
     private void Update()
     {
-        if (!IsServer || !_initialized) return;
+        if (!_initialized) return;
 
-        // Target gone → despawn
-        if (_target == null || _targetTransform == null || !_targetTransform.gameObject.activeInHierarchy)
+        if (IsServer)
         {
-            NetworkObject.Despawn(true);
-            return;
+            // Target gone → despawn
+            if (_target == null || _targetTransform == null || !_targetTransform.gameObject.activeInHierarchy)
+            {
+                NetworkObject.Despawn(true);
+                return;
+            }
+
+            Vector3 targetPos = _targetTransform.position;
+            float   step      = _speed * Time.deltaTime;
+            transform.position = Vector3.MoveTowards(transform.position, targetPos, step);
+            _netPos.Value      = transform.position;
+
+            // Hit
+            if (Vector3.Distance(transform.position, targetPos) < hitRadius)
+            {
+                if (!_target.IsImmuneTo(_shooterClientId))
+                    _target.TakeDamage(_damage, _shooterClientId);
+
+                // Dismiss tutorial hint only for the shooter's client
+                if (_target is TrainingDummy dummy)
+                    dummy.NotifyAutoAttackHit(_shooterClientId);
+
+                NetworkObject.Despawn(true);
+            }
         }
-
-        Vector3 targetPos = _targetTransform.position;
-        float   step      = _speed * Time.deltaTime;
-        transform.position = Vector3.MoveTowards(transform.position, targetPos, step);
-
-        // Hit
-        if (Vector3.Distance(transform.position, targetPos) < hitRadius)
+        else
         {
-            if (!_target.IsImmuneTo(_shooterClientId))
-                _target.TakeDamage(_damage, _shooterClientId);
-
-            // Dismiss tutorial hint only for the shooter's client
-            if (_target is TrainingDummy dummy)
-                dummy.NotifyAutoAttackHit(_shooterClientId);
-
-            NetworkObject.Despawn(true);
+            // Clients: follow the synced position
+            transform.position = _netPos.Value;
         }
     }
 }
