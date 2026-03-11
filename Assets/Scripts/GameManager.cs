@@ -804,14 +804,22 @@ public class GameManager : MonoBehaviour
         // ── Health bar ────────────────────────────────────────────────────
         float barY = colTop + abilitySize + barGap;
         DrawRect(abX, barY, colW, barH, new Color(0.08f, 0.08f, 0.08f, 0.9f));
-        float hp = health != null ? health.HealthFraction : 1f;
-        if (hp > 0f)        DrawRect(abX,             barY, colW * hp,         barH, new Color(0.2f,  0.78f, 0.2f,  1f));
-        if (hp < 1f)        DrawRect(abX + colW * hp,  barY, colW * (1f - hp),  barH, new Color(0.72f, 0.14f, 0.14f, 1f));
+        float hp          = health != null ? health.HealthFraction : 1f;
+        float shieldVal   = health?.ShieldHP.Value ?? 0f;
+        float maxHp       = health?.MaxHealth ?? 100f;
+        float shieldFrac  = maxHp > 0f ? Mathf.Clamp01(shieldVal / maxHp) : 0f;
+        float afterShield = Mathf.Min(1f, hp + shieldFrac);
+        if (hp > 0f)             DrawRect(abX,                  barY, colW * hp,                          barH, new Color(0.2f,  0.78f, 0.2f,  1f));
+        if (shieldFrac > 0f)     DrawRect(abX + colW * hp,      barY, colW * Mathf.Min(shieldFrac, 1f - hp), barH, new Color(0.7f,  0.7f,  0.7f,  0.85f));
+        if (afterShield < 1f)    DrawRect(abX + colW * afterShield, barY, colW * (1f - afterShield),      barH, new Color(0.72f, 0.14f, 0.14f, 1f));
 
         // Health numeric label — drawn over the bar
         _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
         _levelStyle.alignment = TextAnchor.MiddleCenter;
-        string hpLabel = $"{Mathf.CeilToInt(health?.CurrentHealth ?? 0)} / {Mathf.CeilToInt(health?.MaxHealth ?? 0)}";
+        int    shieldInt = Mathf.CeilToInt(shieldVal);
+        string hpLabel   = shieldInt > 0
+            ? $"{Mathf.CeilToInt(health?.CurrentHealth ?? 0)} / {Mathf.CeilToInt(health?.MaxHealth ?? 0)} (+{shieldInt})"
+            : $"{Mathf.CeilToInt(health?.CurrentHealth ?? 0)} / {Mathf.CeilToInt(health?.MaxHealth ?? 0)}";
         GUI.Label(new Rect(abX, barY, colW, barH), hpLabel, _levelStyle);
 
         // ── Mana bar ──────────────────────────────────────────────────────

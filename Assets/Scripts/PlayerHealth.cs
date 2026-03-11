@@ -53,13 +53,12 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         NetworkVariableWritePermission.Server
     );
 
-    private RectTransform   _greenFillRect; // width driven via anchorMax.x
+    private RectTransform   _greenFillRect;  // width driven via anchorMax.x
+    private RectTransform   _shieldFillRect; // grey shield overlay on top of green fill
     private TextMeshProUGUI _healthText;
-    private RectTransform   _barRect;      // root rect for this player's screen-space bar
+    private RectTransform   _barRect;       // root rect for this player's screen-space bar
     private Camera          _cam;
     private bool            _isDead;
-    private LineRenderer    _shieldRing;
-    private const int       ShieldRingSegments = 32;
 
     // Shared screen-space canvas for all health bars (created once).
     private static Canvas _hudCanvas;
@@ -82,7 +81,6 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         ShieldHP.OnValueChanged += OnShieldHPChanged;
         _cam = Camera.main;
         CreateHealthBar();
-        CreateShieldRing();
     }
 
     public override void OnNetworkDespawn()
@@ -268,7 +266,6 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     private void LateUpdate()
     {
-        LateUpdateShieldRing();
         if (_barRect == null) return;
         if (_cam == null) _cam = Camera.main;
         if (_cam == null) return;
@@ -291,7 +288,16 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     private void OnShieldHPChanged(float previous, float current)
     {
-        if (_shieldRing != null) _shieldRing.enabled = current > 0f;
+        UpdateBar(Health.Value);  // redraws green + shield position + text
+    }
+
+    private void UpdateShieldBar(float shield)
+    {
+        if (_shieldFillRect == null) return;
+        float hpFrac     = maxHealth > 0f ? Mathf.Clamp01(Health.Value / maxHealth) : 0f;
+        float shieldFrac = maxHealth > 0f ? Mathf.Clamp01(shield / maxHealth) : 0f;
+        _shieldFillRect.anchorMin = new Vector2(hpFrac, 0f);
+        _shieldFillRect.anchorMax = new Vector2(Mathf.Min(1f, hpFrac + shieldFrac), 1f);
     }
 
     private void UpdateBar(float current)
@@ -299,12 +305,17 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         if (_greenFillRect != null)
         {
             float t = Mathf.Clamp01(current / maxHealth);
-            // Shrink the right anchor to reduce width — no sprite required.
             _greenFillRect.anchorMax = new Vector2(t, 1f);
         }
 
+        UpdateShieldBar(ShieldHP.Value);
+
         if (_healthText != null)
-            _healthText.text = $"{Mathf.RoundToInt(current)}/{Mathf.RoundToInt(maxHealth)}";
+        {
+            int shield = Mathf.RoundToInt(ShieldHP.Value);
+            string shieldStr = shield > 0 ? $" (+{shield})" : "";
+            _healthText.text = $"{Mathf.RoundToInt(current)}/{Mathf.RoundToInt(maxHealth)}{shieldStr}";
+        }
     }
 
     private void DestroyBar()
@@ -348,7 +359,16 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         _greenFillRect.offsetMin  = _greenFillRect.offsetMax = Vector2.zero;
         greenGO.AddComponent<Image>().color = new Color(0.18f, 0.78f, 0.18f);
 
-        // Layer 4 — text label sized to 100% of bar height
+        // Layer 4 — grey shield overlay (shown when ShieldHP > 0)
+        var shieldGO   = new GameObject("ShieldFill");
+        shieldGO.transform.SetParent(barGO.transform, false);
+        _shieldFillRect          = shieldGO.AddComponent<RectTransform>();
+        _shieldFillRect.anchorMin = Vector2.zero;
+        _shieldFillRect.anchorMax = Vector2.zero;  // starts collapsed; UpdateShieldBar sets it
+        _shieldFillRect.offsetMin = _shieldFillRect.offsetMax = Vector2.zero;
+        shieldGO.AddComponent<Image>().color = new Color(0.7f, 0.7f, 0.7f, 0.75f);
+
+        // Layer 5 — text label sized to 100% of bar height
         var textGO  = MakeFullRect(barGO, "HealthText");
         _healthText = textGO.AddComponent<TextMeshProUGUI>();
         _healthText.alignment          = TextAlignmentOptions.Center;
@@ -360,49 +380,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         _healthText.overflowMode       = TextOverflowModes.Overflow;
 
         UpdateBar(Health.Value);
-    }
-
-    private void CreateShieldRing()
-    {
-        var go = new GameObject("ShieldRing");
-        go.transform.SetParent(transform);
-        _shieldRing = go.AddComponent<LineRenderer>();
-        _shieldRing.loop              = true;
-        _shieldRing.positionCount     = ShieldRingSegments;
-        _shieldRing.startWidth        = 0.12f;
-        _shieldRing.endWidth          = 0.12f;
-        _shieldRing.useWorldSpace     = true;
-        _shieldRing.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        _shieldRing.receiveShadows    = false;
-
-        var mat = new Material(Shader.Find("Sprites/Default"));
-        mat.color = new Color(0.3f, 0.7f, 1f, 0.85f);
-        _shieldRing.material = mat;
-
-        float radius = 1.0f;
-        for (int i = 0; i < ShieldRingSegments; i++)
-        {
-            float angle = (float)i / ShieldRingSegments * Mathf.PI * 2f;
-            _shieldRing.SetPosition(i, new Vector3(
-                transform.position.x + Mathf.Cos(angle) * radius,
-                transform.position.y + 0.5f,
-                transform.position.z + Mathf.Sin(angle) * radius));
-        }
-        _shieldRing.enabled = false;
-    }
-
-    private void LateUpdateShieldRing()
-    {
-        if (_shieldRing == null || !_shieldRing.enabled) return;
-        float radius = 1.0f;
-        for (int i = 0; i < ShieldRingSegments; i++)
-        {
-            float angle = (float)i / ShieldRingSegments * Mathf.PI * 2f;
-            _shieldRing.SetPosition(i, new Vector3(
-                transform.position.x + Mathf.Cos(angle) * radius,
-                transform.position.y + 0.5f,
-                transform.position.z + Mathf.Sin(angle) * radius));
-        }
+        UpdateShieldBar(ShieldHP.Value);
     }
 
     private static Canvas GetOrCreateHudCanvas()

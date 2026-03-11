@@ -21,9 +21,9 @@ GameObject:
   - component: {fileID: 6461678683479735571}
   - component: {fileID: 9065941875211792016}
   - component: {fileID: -5026939236243210125}
+  - component: {fileID: -4618408539499464514}
   - component: {fileID: 865988660502746192}
   - component: {fileID: -787938802414070686}
-  - component: {fileID: -4618408539499464514}
   m_Layer: 0
   m_Name: GamePlayer
   m_TagString: Untagged
@@ -324,6 +324,30 @@ MonoBehaviour:
   arrowHeadLength: 1.2
   arrowHeadWidth: 0.6
   manaCost: 10
+--- !u!114 &-4618408539499464514
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3733706192183858795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fffd11da015434478a292d31f7b0f3b5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ShieldAbility
+  ShowTopMostFoldoutHeaderGroup: 1
+  shieldAmount: 50
+  shieldDuration: 3
+  cooldown: 8
+  manaCost: 10
+  radius: 1.25
+  height: 0.3
+  spacing: 0.5
+  ringCount: 3
+  width: 0.15
+  color: {r: 0, g: 0.9510727, b: 1, a: 0.9}
+  segments: 8
 --- !u!114 &865988660502746192
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -373,23 +397,6 @@ MonoBehaviour:
   orbitRadius: 1.5
   orbitSpeed: 360
   orbitBallSize: 0.75
---- !u!114 &-4618408539499464514
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3733706192183858795}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fffd11da015434478a292d31f7b0f3b5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ShieldAbility
-  ShowTopMostFoldoutHeaderGroup: 1
-  shieldAmount: 50
-  shieldDuration: 3
-  cooldown: 8
-  manaCost: 10
 --- !u!1 &8598427067344695647
 GameObject:
   m_ObjectHideFlags: 0
