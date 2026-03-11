@@ -1368,7 +1368,9 @@ public class GameManager : MonoBehaviour
     private void DrawLabelWithOutline(Rect r, string text, float px)
     {
         Color fg = _levelStyle.normal.textColor;
-        _levelStyle.normal.textColor = new Color(0f, 0f, 0f, 0.85f);
+        var shadow = new Color(0f, 0f, 0f, 0.85f);
+        _levelStyle.normal.textColor = shadow;
+        _levelStyle.hover.textColor  = shadow;
         for (int dx = -1; dx <= 1; dx++)
         for (int dy = -1; dy <= 1; dy++)
         {
@@ -1376,6 +1378,7 @@ public class GameManager : MonoBehaviour
             GUI.Label(new Rect(r.x + dx * px, r.y + dy * px, r.width, r.height), text, _levelStyle);
         }
         _levelStyle.normal.textColor = fg;
+        _levelStyle.hover.textColor  = fg;
         GUI.Label(r, text, _levelStyle);
     }
 
