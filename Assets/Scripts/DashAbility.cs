@@ -20,6 +20,7 @@ public class DashAbility : NetworkBehaviour
     public float CooldownFraction  => Mathf.Clamp01((_nextDashTime - Time.time) / cooldown);
     public float CooldownRemaining => Mathf.Max(0f, _nextDashTime - Time.time);
     public bool  IsAiming          => _aiming;
+    public float ManaCost          => manaCost;
 
     private static readonly Vector3 MoveForward = new Vector3(1f, 0f, 1f).normalized;
     private static readonly Vector3 MoveRight   = new Vector3(1f, 0f, -1f).normalized;

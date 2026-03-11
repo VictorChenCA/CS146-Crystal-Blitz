@@ -26,6 +26,7 @@ public class ProjectileShooter : NetworkBehaviour
     public float CooldownFraction  => Mathf.Clamp01((_nextFireTime - Time.time) / fireCooldown);
     public float CooldownRemaining => Mathf.Max(0f, _nextFireTime - Time.time);
     public float CastFraction      => _castFraction;
+    public float ManaCost          => manaCost;
 
     private readonly Plane _groundPlane = new Plane(Vector3.up, Vector3.zero);
     private Camera _mainCamera;

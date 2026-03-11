@@ -24,9 +24,16 @@ public class CameraFollow : MonoBehaviour
     [SerializeField] private float   lobbyOriginPullY    = 0.3f;
     [SerializeField] private float   lobbyOriginRotation = 0f;
 
+    [Header("Server Edge Pan")]
+    [SerializeField] private float edgePanSpeed  = 20f;   // world units/sec
+    [SerializeField] private float edgeThreshold = 20f;   // pixels from edge
+
     public static CameraFollow Instance { get; private set; }
 
     private Transform _target;
+
+    private Vector3 _freeCamPos;
+    private bool    _freeCamInitialized;
 
     // ── Temporary target override (for win-sequence crystal cam pan) ──────────
     private Vector3? _tempTarget;
@@ -52,6 +59,37 @@ public class CameraFollow : MonoBehaviour
     {
         _target = target;
         transform.position = DesiredPosition(_target.position);
+    }
+
+    // ── Server spectator helpers ──────────────────────────────────────────────
+
+    private bool IsServerSpectating() =>
+        Unity.Netcode.NetworkManager.Singleton != null &&
+        Unity.Netcode.NetworkManager.Singleton.IsServer &&
+        !Unity.Netcode.NetworkManager.Singleton.IsClient;
+
+    private void HandleEdgePan()
+    {
+        var     kb    = UnityEngine.InputSystem.Keyboard.current;
+        Vector2 mouse = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
+        Vector3 fwd   = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
+        Vector3 rgt   = Vector3.ProjectOnPlane(transform.right,   Vector3.up).normalized;
+        Vector3 delta = Vector3.zero;
+
+        // Edge pan
+        if (mouse.x <= edgeThreshold)                  delta -= rgt;
+        if (mouse.x >= Screen.width  - edgeThreshold)  delta += rgt;
+        if (mouse.y <= edgeThreshold)                   delta -= fwd;
+        if (mouse.y >= Screen.height - edgeThreshold)   delta += fwd;
+
+        // WASD
+        if (kb.wKey.isPressed) delta += fwd;
+        if (kb.sKey.isPressed) delta -= fwd;
+        if (kb.aKey.isPressed) delta -= rgt;
+        if (kb.dKey.isPressed) delta += rgt;
+
+        if (delta.sqrMagnitude > 1f) delta.Normalize();
+        _freeCamPos += delta * (edgePanSpeed * Time.deltaTime);
     }
 
     // ── Active parameter selection ────────────────────────────────────────────
@@ -98,6 +136,23 @@ public class CameraFollow : MonoBehaviour
             Quaternion.Euler(ActiveRotation()),
             rotationSpeed * Time.deltaTime
         );
+
+        // Server-only spectator: no player spawns, so drive a free-cam via edge-pan
+        if (_target == null && IsServerSpectating())
+        {
+            if (!_freeCamInitialized)
+            {
+                _freeCamPos        = transform.position - ActiveOffset();
+                _freeCamInitialized = true;
+            }
+            HandleEdgePan();
+            transform.position = Vector3.Lerp(
+                transform.position,
+                DesiredPosition(_freeCamPos),
+                smoothSpeed * Time.deltaTime
+            );
+            return;
+        }
 
         Vector3 followPos;
         if (_tempTarget.HasValue && Time.time < _tempTargetExpiry)

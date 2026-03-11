@@ -66,6 +66,15 @@ public class GameManager : MonoBehaviour
     private Texture2D _segInactiveTex;
     private Texture2D _circleTex;
 
+    // ── Ability Icons (assign in Inspector) ──────────────────────────────────
+    [Header("Ability Icons")]
+    [SerializeField] private Texture2D _iconTankQ;
+    [SerializeField] private Texture2D _iconTankW;
+    [SerializeField] private Texture2D _iconTankE;
+    [SerializeField] private Texture2D _iconRangerQ;
+    [SerializeField] private Texture2D _iconRangerW;
+    [SerializeField] private Texture2D _iconRangerE;
+
     // ── GUIStyles (lazy-initialized once) ────────────────────────────────────
     private GUIStyle _titleStyle;
     private GUIStyle _subtitleStyle;
@@ -1029,13 +1038,23 @@ public class GameManager : MonoBehaviour
         var localObj = nm?.LocalClient?.PlayerObject;
         if (localObj == null) return;
 
-        var health      = localObj.GetComponent<PlayerHealth>();
-        var shooter     = localObj.GetComponent<ProjectileShooter>();
-        var tripleShot  = localObj.GetComponent<TripleShotAbility>();
-        var dash        = localObj.GetComponent<DashAbility>();
-        var pc          = localObj.GetComponent<PlayerController>();
-        var mana        = localObj.GetComponent<PlayerMana>();
-        var xp          = localObj.GetComponent<PlayerXP>();
+        var health  = localObj.GetComponent<PlayerHealth>();
+        var shooter = localObj.GetComponent<ProjectileShooter>();
+        var pc      = localObj.GetComponent<PlayerController>();
+        var mana    = localObj.GetComponent<PlayerMana>();
+        var xp      = localObj.GetComponent<PlayerXP>();
+
+        int  charIdx = pc?.CharacterIndex.Value ?? 0;
+        bool isTank  = charIdx == 0;
+
+        var shield     = isTank ? localObj.GetComponent<ShieldAbility>()     : null;
+        var fanShot    = isTank ? localObj.GetComponent<FanShotAbility>()    : null;
+        var dash       = isTank ? null : localObj.GetComponent<DashAbility>();
+        var tripleShot = isTank ? null : localObj.GetComponent<TripleShotAbility>();
+
+        Texture2D iconQ = isTank ? _iconTankQ : _iconRangerQ;
+        Texture2D iconW = isTank ? _iconTankW : _iconRangerW;
+        Texture2D iconE = isTank ? _iconTankE : _iconRangerE;
 
         // ── Layout constants (scaled) ─────────────────────────────────────
         float s            = _guiScale * GameSettings.BottomBarScale;
@@ -1087,89 +1106,68 @@ public class GameManager : MonoBehaviour
         GUI.Label(new Rect(circleC.x - lvlW * 0.5f, circleTop + circleD - 2f, lvlW, lvlH),
                   (xp?.Level.Value ?? 1).ToString(), _levelStyle);
 
-        // ── Ability 1 — projectile ───────────────────────────────────────
-        DrawRect(abX, colTop, abilitySize, abilitySize, new Color(0.12f, 0.12f, 0.12f, 0.92f));
-
-        float cast = shooter != null ? shooter.CastFraction : 0f;
-        float cd   = shooter != null ? shooter.CooldownFraction : 0f;
-
-        if (cast > 0.01f)
-        {
-            // Cast bar: white transparent fill growing upward from bottom
-            float fillH = cast * abilitySize;
-            DrawRect(abX, colTop + abilitySize - fillH, abilitySize, fillH, new Color(1f, 1f, 1f, 0.35f));
-        }
-        else if (cd > 0.01f)
-        {
-            // Cooldown overlay: dark, anchored at bottom, shrinking upward
-            DrawRect(abX, colTop + abilitySize * (1f - cd), abilitySize, cd * abilitySize, new Color(0f, 0f, 0f, 0.5f));
-            _levelStyle.fontSize = Mathf.RoundToInt(16f * s);
-            GUI.Label(new Rect(abX, colTop, abilitySize, abilitySize),
-                      shooter.CooldownRemaining.ToString("0.0"), _levelStyle);
-        }
-
-        // Keybind label — bottom-left quarter of ability 1 icon
+        // ── Slot 1 — Q (projectile) ──────────────────────────────────────
         string keybind1 = GameKeybinds.KeyName(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability1 : GameKeybinds.PnC_Ability1);
-        _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
-        _levelStyle.alignment = TextAnchor.LowerLeft;
-        GUI.Label(new Rect(abX + 3f * s, colTop, abilitySize - 3f * s, abilitySize - 3f * s),
-                  keybind1, _levelStyle);
-        _levelStyle.alignment = TextAnchor.UpperCenter;
+        DrawAbilitySlot(abX, colTop, abilitySize, s,
+            iconQ,
+            shooter?.CastFraction      ?? 0f,
+            shooter?.CooldownFraction  ?? 0f,
+            shooter?.CooldownRemaining ?? 0f,
+            false,
+            shooter?.ManaCost          ?? 0f,
+            keybind1);
 
-        // ── Ability 2 — dash ─────────────────────────────────────────────
+        // ── Slot 2 — W (dash / shield) ───────────────────────────────────
         float ab2X    = abX + abilitySize + abilityGap;
-        float dashCD  = dash != null ? dash.CooldownFraction  : 0f;
-        float dashCDR = dash != null ? dash.CooldownRemaining : 0f;
-        DrawRect(ab2X, colTop, abilitySize, abilitySize, new Color(0.12f, 0.12f, 0.12f, 0.92f));
-
-        if (dash != null && dash.IsAiming)
-            DrawRect(ab2X, colTop, abilitySize, abilitySize, new Color(1f, 1f, 1f, 0.2f));
-        else if (dashCD > 0.01f)
-        {
-            DrawRect(ab2X, colTop + abilitySize * (1f - dashCD), abilitySize, dashCD * abilitySize,
-                     new Color(0f, 0f, 0f, 0.5f));
-            _levelStyle.fontSize = Mathf.RoundToInt(16f * s);
-            GUI.Label(new Rect(ab2X, colTop, abilitySize, abilitySize),
-                      dashCDR.ToString("0.0"), _levelStyle);
-        }
-
         string keybind2 = GameKeybinds.KeyName(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability2 : GameKeybinds.PnC_Ability2);
-        _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
-        _levelStyle.alignment = TextAnchor.LowerLeft;
-        GUI.Label(new Rect(ab2X + 3f * s, colTop, abilitySize - 3f * s, abilitySize - 3f * s),
-                  keybind2, _levelStyle);
-        _levelStyle.alignment = TextAnchor.UpperCenter;
-
-        // ── Ability 3 — triple shot ───────────────────────────────────────
-        float ab3X  = abX + (abilitySize + abilityGap) * 2f;
-        float tsCD  = tripleShot != null ? tripleShot.CooldownFraction  : 0f;
-        float tsCDR = tripleShot != null ? tripleShot.CooldownRemaining : 0f;
-        DrawRect(ab3X, colTop, abilitySize, abilitySize, new Color(0.12f, 0.12f, 0.12f, 0.92f));
-
-        if (tsCD > 0.01f)
+        if (isTank)
         {
-            DrawRect(ab3X, colTop + abilitySize * (1f - tsCD), abilitySize, tsCD * abilitySize,
-                     new Color(0f, 0f, 0f, 0.5f));
-            _levelStyle.fontSize = Mathf.RoundToInt(16f * s);
-            GUI.Label(new Rect(ab3X, colTop, abilitySize, abilitySize),
-                      tsCDR.ToString("0.0"), _levelStyle);
+            DrawAbilitySlot(ab2X, colTop, abilitySize, s,
+                iconW,
+                0f,
+                shield?.CooldownFraction  ?? 0f,
+                shield?.CooldownRemaining ?? 0f,
+                (health?.ShieldHP.Value ?? 0f) > 0f,
+                shield?.ManaCost ?? 0f,
+                keybind2);
+        }
+        else
+        {
+            DrawAbilitySlot(ab2X, colTop, abilitySize, s,
+                iconW,
+                0f,
+                dash?.CooldownFraction  ?? 0f,
+                dash?.CooldownRemaining ?? 0f,
+                dash?.IsAiming ?? false,
+                dash?.ManaCost ?? 0f,
+                keybind2);
         }
 
-        // Keybind label for ability 3
+        // ── Slot 3 — E (fan shot / triple shot) ──────────────────────────
+        float ab3X    = abX + (abilitySize + abilityGap) * 2f;
         string keybind3 = GameKeybinds.KeyName(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability3 : GameKeybinds.PnC_Ability3);
-        _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
-        _levelStyle.alignment = TextAnchor.LowerLeft;
-        GUI.Label(new Rect(ab3X + 3f * s, colTop, abilitySize - 3f * s, abilitySize - 3f * s),
-                  keybind3, _levelStyle);
-        _levelStyle.alignment = TextAnchor.UpperCenter;
-
-        // ── Mana cost labels on ability icons (top-right corner) ─────────
-        _levelStyle.fontSize  = Mathf.RoundToInt(10f * s);
-        _levelStyle.alignment = TextAnchor.UpperRight;
-        GUI.Label(new Rect(abX,  colTop, abilitySize - 3f * s, abilitySize - 3f * s), "20", _levelStyle);
-        GUI.Label(new Rect(ab2X, colTop, abilitySize - 3f * s, abilitySize - 3f * s), "10", _levelStyle);
-        GUI.Label(new Rect(ab3X, colTop, abilitySize - 3f * s, abilitySize - 3f * s), "30", _levelStyle);
-        _levelStyle.alignment = TextAnchor.UpperCenter;
+        if (isTank)
+        {
+            DrawAbilitySlot(ab3X, colTop, abilitySize, s,
+                iconE,
+                0f,
+                fanShot?.CooldownFraction  ?? 0f,
+                fanShot?.CooldownRemaining ?? 0f,
+                fanShot?.IsCharging ?? false,
+                fanShot?.ManaCost   ?? 0f,
+                keybind3);
+        }
+        else
+        {
+            DrawAbilitySlot(ab3X, colTop, abilitySize, s,
+                iconE,
+                0f,
+                tripleShot?.CooldownFraction  ?? 0f,
+                tripleShot?.CooldownRemaining ?? 0f,
+                tripleShot?.IsCharging ?? false,
+                tripleShot?.ManaCost   ?? 0f,
+                keybind3);
+        }
 
         // ── Health bar ────────────────────────────────────────────────────
         float barY       = colTop + abilitySize + barGap;
@@ -1206,6 +1204,74 @@ public class GameManager : MonoBehaviour
     }
 
     // ── Draw helpers ──────────────────────────────────────────────────────────
+
+    private void DrawAbilitySlot(float x, float y, float size, float s,
+        Texture2D icon, float castFrac, float cdFrac, float cdRemaining,
+        bool isCharging, float manaCost, string keybind)
+    {
+        // 1. Dark background
+        DrawRect(x, y, size, size, new Color(0.12f, 0.12f, 0.12f, 0.92f));
+
+        // 2. Icon
+        if (icon != null)
+        {
+            GUI.color = Color.white;
+            GUI.DrawTexture(new Rect(x, y, size, size), icon, ScaleMode.ScaleToFit);
+        }
+
+        // 3. Overlays
+        if (castFrac > 0.01f)
+        {
+            // Cast: white fill growing upward from bottom
+            float fillH = castFrac * size;
+            DrawRect(x, y + size - fillH, size, fillH, new Color(1f, 1f, 1f, 0.35f));
+        }
+        else if (isCharging)
+        {
+            // Charging / active: faint white pulse over entire slot
+            DrawRect(x, y, size, size, new Color(1f, 1f, 1f, 0.2f));
+        }
+        else if (cdFrac > 0.01f)
+        {
+            // Cooldown: dark overlay anchored at top, draining downward
+            DrawRect(x, y, size, cdFrac * size, new Color(0f, 0f, 0f, 0.55f));
+            _levelStyle.fontSize  = Mathf.RoundToInt(16f * s);
+            _levelStyle.alignment = TextAnchor.MiddleCenter;
+            GUI.Label(new Rect(x, y, size, size), cdRemaining.ToString("0.0"), _levelStyle);
+            _levelStyle.alignment = TextAnchor.UpperCenter;
+        }
+
+        // 4. Mana cost — top-right (hidden when 0)
+        if (manaCost > 0f)
+        {
+            _levelStyle.fontSize  = Mathf.RoundToInt(10f * s);
+            _levelStyle.alignment = TextAnchor.UpperRight;
+            string manaStr = Mathf.RoundToInt(manaCost).ToString();
+            float  manaW   = size - 3f * s;
+            DrawLabelWithOutline(new Rect(x, y, manaW, manaW), manaStr, 1f);
+            _levelStyle.alignment = TextAnchor.UpperCenter;
+        }
+
+        // 5. Keybind — bottom-left
+        _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
+        _levelStyle.alignment = TextAnchor.LowerLeft;
+        DrawLabelWithOutline(new Rect(x + 3f * s, y, size - 3f * s, size - 3f * s), keybind, 1f);
+        _levelStyle.alignment = TextAnchor.UpperCenter;
+    }
+
+    private void DrawLabelWithOutline(Rect r, string text, float px)
+    {
+        Color fg = _levelStyle.normal.textColor;
+        _levelStyle.normal.textColor = new Color(0f, 0f, 0f, 0.85f);
+        for (int dx = -1; dx <= 1; dx++)
+        for (int dy = -1; dy <= 1; dy++)
+        {
+            if (dx == 0 && dy == 0) continue;
+            GUI.Label(new Rect(r.x + dx * px, r.y + dy * px, r.width, r.height), text, _levelStyle);
+        }
+        _levelStyle.normal.textColor = fg;
+        GUI.Label(r, text, _levelStyle);
+    }
 
     private void DrawRect(float x, float y, float w, float h, Color color)
     {

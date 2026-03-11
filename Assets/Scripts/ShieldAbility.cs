@@ -26,6 +26,7 @@ public class ShieldAbility : NetworkBehaviour
 
     public float CooldownFraction  => Mathf.Clamp01((_nextShieldTime - Time.time) / cooldown);
     public float CooldownRemaining => Mathf.Max(0f, _nextShieldTime - Time.time);
+    public float ManaCost          => manaCost;
 
     private PlayerController _pc;
     private PlayerHealth     _health;
