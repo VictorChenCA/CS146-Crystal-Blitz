@@ -207,6 +207,8 @@ public class PlayerController : NetworkBehaviour
         ApplyCharacterAppearance(next);
         if (IsServer)
             GetComponent<PlayerHealth>()?.SetBaseHealth(next);
+        else
+            GetComponent<PlayerHealth>()?.ClientUpdateMaxHealth(next);
     }
 
     private void ApplyCharacterAppearance(int index)
@@ -236,7 +238,6 @@ public class PlayerController : NetworkBehaviour
     private void Update()
     {
         if (Keyboard.current == null) return;
-        HandleTeamSwitch();
 
         if (GameSettings.UseWasd)
         {
@@ -285,22 +286,6 @@ public class PlayerController : NetworkBehaviour
     {
         transform.position = pos;
         _agent?.Warp(pos);
-    }
-
-    // ── Team switch (editor only) ─────────────────────────────────────────────
-
-    private void HandleTeamSwitch()
-    {
-#if UNITY_EDITOR
-        if (Keyboard.current.oKey.wasPressedThisFrame) ChangeTeamServerRpc(0);
-        if (Keyboard.current.pKey.wasPressedThisFrame) ChangeTeamServerRpc(1);
-#endif
-    }
-
-    [Rpc(SendTo.Server)]
-    private void ChangeTeamServerRpc(int team, RpcParams rpcParams = default)
-    {
-        TeamIndex.Value = team;
     }
 
     [ServerRpc]

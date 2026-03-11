@@ -60,6 +60,10 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     private Camera          _cam;
     private bool            _isDead;
 
+    // Server-only last-player-damage tracking (10s window)
+    private ulong _lastPlayerDamagerClientId;
+    private float _lastPlayerDamageTime = -11f;
+
     // Shared screen-space canvas for all health bars (created once).
     private static Canvas _hudCanvas;
 
@@ -115,12 +119,23 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
         Health.Value = Mathf.Max(0f, Health.Value - amount);
 
+        // Track last player damage (server-only, no sync needed)
+        if (killerClientId != ulong.MaxValue)
+        {
+            _lastPlayerDamagerClientId = killerClientId;
+            _lastPlayerDamageTime      = Time.time;
+        }
+
         if (Health.Value <= 0f)
         {
             _isDead = true;
+            // Resolve effective killer: last player damage within 10s window
+            ulong effectiveKiller = (Time.time - _lastPlayerDamageTime <= 10f)
+                ? _lastPlayerDamagerClientId
+                : ulong.MaxValue;
             // Both RPCs must be sent BEFORE despawn while NetworkObject is still valid.
             NotifyDeathRpc(respawnDelay);
-            AnnounceKillRpc(killerClientId, OwnerClientId);
+            AnnounceKillRpc(effectiveKiller, OwnerClientId);
             StartCoroutine(DespawnAndRespawn(OwnerClientId));
         }
     }
@@ -134,12 +149,20 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         Health.Value = maxHealth;
     }
 
+    // Called on non-server clients when CharacterIndex changes
+    public void ClientUpdateMaxHealth(int charIdx)
+    {
+        maxHealth = charIdx == 0 ? 150f : 100f;
+        UpdateBar(Health.Value);
+    }
+
     public void ResetToBase(int charIdx)
     {
         if (!IsServer) return;
-        maxHealth      = charIdx == 0 ? 150f : 100f;
-        Health.Value   = maxHealth;
-        ShieldHP.Value = 0f;
+        maxHealth             = charIdx == 0 ? 150f : 100f;
+        Health.Value          = maxHealth;
+        ShieldHP.Value        = 0f;
+        _lastPlayerDamageTime = -11f;
     }
 
     public void GrantShield(float amount, float duration)
@@ -214,9 +237,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     [Rpc(SendTo.ClientsAndHost)]
     private void AnnounceKillRpc(ulong killer, ulong victim)
     {
-        string killerName = killer == ulong.MaxValue ? "Unknown" : $"Player {killer + 1}";
         string victimName = $"Player {victim + 1}";
-        OnKillAnnouncement?.Invoke($"{killerName} has defeated {victimName}");
+        string msg = killer == ulong.MaxValue
+            ? $"{victimName} has been executed!"
+            : $"Player {killer + 1} has defeated {victimName}";
+        OnKillAnnouncement?.Invoke(msg);
     }
 
     [Rpc(SendTo.Owner)]
