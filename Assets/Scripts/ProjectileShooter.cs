@@ -38,11 +38,17 @@ public class ProjectileShooter : NetworkBehaviour
     private LineRenderer _trajectoryLine;
     private const int RingSegments = 64;
 
-    private PlayerMana _mana;
-    private PlayerXP   _xp;
+    private PlayerMana       _mana;
+    private PlayerXP         _xp;
+    private PlayerController _pc;
+
+    private GameObject _nonOwnerPreview;
+    private Coroutine  _nonOwnerPreviewCoroutine;
 
     public override void OnNetworkSpawn()
     {
+        _pc = GetComponent<PlayerController>();
+
         if (!IsOwner)
         {
             enabled = false;
@@ -81,7 +87,9 @@ public class ProjectileShooter : NetworkBehaviour
             if (_mana != null && !_mana.HasMana(manaCost)) return;
             _charging = true;
             GetComponent<TripleShotAbility>()?.CancelCharge();
+            GetComponent<FanShotAbility>()?.CancelCharge();
             GetComponent<DashAbility>()?.CancelAim();
+            BroadcastChargeStartRpc();
         }
 
         if (_charging)
@@ -98,6 +106,7 @@ public class ProjectileShooter : NetworkBehaviour
             _charging               = false;
             _rangeRing.enabled      = false;
             _trajectoryLine.enabled = false;
+            BroadcastCancelRpc();
             return;
         }
 
@@ -179,7 +188,9 @@ public class ProjectileShooter : NetworkBehaviour
         // Fire at end of cast phase — cooldown starts here
         _mana?.SpendManaServerRpc(manaCost);
         float scaledDamage = damage * (1f + 0.1f * ((_xp?.Level.Value ?? 1) - 1));
-        FireProjectileServerRpc(startPos, targetPos, scaledDamage);
+        float speedMult    = (_pc != null && _pc.CharacterIndex.Value == 0) ? 0.8f : 1.0f;
+        float sizeMult     = (_pc != null && _pc.CharacterIndex.Value == 0) ? 1.3f : 1.0f;
+        FireProjectileServerRpc(startPos, targetPos, scaledDamage, speedMult, sizeMult);
         _nextFireTime = Time.time + fireCooldown;
 
         // Phase 2: Animation delay — projectile in flight, can cancel lock early
@@ -315,13 +326,57 @@ public class ProjectileShooter : NetworkBehaviour
     }
 
     [ServerRpc]
-    private void FireProjectileServerRpc(Vector3 startPos, Vector3 endPos, float damageAmount)
+    private void FireProjectileServerRpc(Vector3 startPos, Vector3 endPos, float damageAmount,
+                                         float speedMult = 1f, float sizeMult = 1f)
     {
         GameObject proj = Instantiate(projectilePrefab, startPos, Quaternion.identity);
         NetworkObject netObj = proj.GetComponent<NetworkObject>();
         netObj.Spawn(true);
 
         ProjectileController controller = proj.GetComponent<ProjectileController>();
-        controller.Initialize(endPos, projectileSpeed, OwnerClientId, damageAmount);
+        controller.Initialize(endPos, projectileSpeed * speedMult, OwnerClientId, damageAmount, sizeMult);
+    }
+
+    // ── Non-owner charge preview ──────────────────────────────────────────────
+
+    [Rpc(SendTo.NotOwner)]
+    private void BroadcastChargeStartRpc()
+    {
+        if (_nonOwnerPreviewCoroutine != null) StopCoroutine(_nonOwnerPreviewCoroutine);
+        _nonOwnerPreviewCoroutine = StartCoroutine(ShowNonOwnerPreview());
+    }
+
+    [Rpc(SendTo.NotOwner)]
+    private void BroadcastCancelRpc()
+    {
+        if (_nonOwnerPreviewCoroutine != null)
+        {
+            StopCoroutine(_nonOwnerPreviewCoroutine);
+            _nonOwnerPreviewCoroutine = null;
+        }
+        if (_nonOwnerPreview != null) { Destroy(_nonOwnerPreview); _nonOwnerPreview = null; }
+    }
+
+    private IEnumerator ShowNonOwnerPreview()
+    {
+        if (_nonOwnerPreview != null) Destroy(_nonOwnerPreview);
+        _nonOwnerPreview = CreatePreviewSphere();
+        Vector3 fp        = firePoint != null ? firePoint.position : transform.position;
+        Vector3 fullScale = projectilePrefab != null
+            ? projectilePrefab.transform.localScale
+            : Vector3.one * 0.3f;
+
+        float elapsed = 0f;
+        while (elapsed < castDelay + animationDelay)
+        {
+            if (_nonOwnerPreview == null) yield break;
+            _nonOwnerPreview.transform.position   = firePoint != null ? firePoint.position : transform.position;
+            _nonOwnerPreview.transform.localScale = Vector3.Lerp(Vector3.zero, fullScale,
+                Mathf.Clamp01(elapsed / castDelay));
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        if (_nonOwnerPreview != null) { Destroy(_nonOwnerPreview); _nonOwnerPreview = null; }
+        _nonOwnerPreviewCoroutine = null;
     }
 }

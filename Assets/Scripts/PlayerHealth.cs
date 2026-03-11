@@ -47,11 +47,19 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         NetworkVariableWritePermission.Server
     );
 
+    public NetworkVariable<float> ShieldHP = new NetworkVariable<float>(
+        0f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     private RectTransform   _greenFillRect; // width driven via anchorMax.x
     private TextMeshProUGUI _healthText;
     private RectTransform   _barRect;      // root rect for this player's screen-space bar
     private Camera          _cam;
     private bool            _isDead;
+    private LineRenderer    _shieldRing;
+    private const int       ShieldRingSegments = 32;
 
     // Shared screen-space canvas for all health bars (created once).
     private static Canvas _hudCanvas;
@@ -70,14 +78,17 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     public override void OnNetworkSpawn()
     {
-        Health.OnValueChanged += OnHealthChanged;
+        Health.OnValueChanged   += OnHealthChanged;
+        ShieldHP.OnValueChanged += OnShieldHPChanged;
         _cam = Camera.main;
         CreateHealthBar();
+        CreateShieldRing();
     }
 
     public override void OnNetworkDespawn()
     {
-        Health.OnValueChanged -= OnHealthChanged;
+        Health.OnValueChanged   -= OnHealthChanged;
+        ShieldHP.OnValueChanged -= OnShieldHPChanged;
         DestroyBar();
     }
 
@@ -93,6 +104,15 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         if (!IsServer || _isDead) return;
         if (IsImmuneTo(killerClientId)) return;
 
+        // Drain shield first
+        if (ShieldHP.Value > 0f)
+        {
+            float absorbed = Mathf.Min(ShieldHP.Value, amount);
+            ShieldHP.Value -= absorbed;
+            amount         -= absorbed;
+            if (amount <= 0f) return;
+        }
+
         Health.Value = Mathf.Max(0f, Health.Value - amount);
 
         if (Health.Value <= 0f)
@@ -103,6 +123,36 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             AnnounceKillRpc(killerClientId, OwnerClientId);
             StartCoroutine(DespawnAndRespawn(OwnerClientId));
         }
+    }
+
+    // ── Shield API (server-only) ─────────────────────────────────────────────
+
+    public void SetBaseHealth(int charIndex)
+    {
+        if (!IsServer) return;
+        maxHealth    = charIndex == 0 ? 150f : 100f;
+        Health.Value = maxHealth;
+    }
+
+    public void ResetToBase(int charIdx)
+    {
+        if (!IsServer) return;
+        maxHealth      = charIdx == 0 ? 150f : 100f;
+        Health.Value   = maxHealth;
+        ShieldHP.Value = 0f;
+    }
+
+    public void GrantShield(float amount, float duration)
+    {
+        if (!IsServer) return;
+        ShieldHP.Value = amount;
+        StartCoroutine(ExpireShield(duration));
+    }
+
+    private IEnumerator ExpireShield(float duration)
+    {
+        yield return new WaitForSeconds(duration);
+        if (ShieldHP.Value > 0f) ShieldHP.Value = 0f;
     }
 
     // ── Regen update (server-only) ────────────────────────────────────────────
@@ -178,9 +228,10 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     private IEnumerator DespawnAndRespawn(ulong clientId)
     {
         // Save player state before the NetworkObject is removed.
-        var pc    = GetComponent<PlayerController>();
-        int team  = pc?.TeamIndex.Value ?? 0;
-        Color col = pc?.PlayerColor.Value ?? Color.white;
+        var pc      = GetComponent<PlayerController>();
+        int team    = pc?.TeamIndex.Value ?? 0;
+        Color col   = pc?.PlayerColor.Value ?? Color.white;
+        int charIdx = pc?.CharacterIndex.Value ?? 0;
 
         // Despawn(false): removes from all clients' views but keeps this server-side
         // GO alive so the coroutine can finish.
@@ -200,10 +251,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         var go       = Instantiate(prefab, spawnPos, Quaternion.identity);
         go.GetComponent<NetworkObject>().SpawnAsPlayerObject(clientId, true);
 
-        // Restore team and color via NetworkVariables.
+        // Restore team, color, and character via NetworkVariables.
         var newPc = go.GetComponent<PlayerController>();
-        newPc.TeamIndex.Value   = team;
-        newPc.PlayerColor.Value = col;
+        newPc.TeamIndex.Value      = team;
+        newPc.PlayerColor.Value    = col;
+        newPc.CharacterIndex.Value = charIdx;
 
         // OnNetworkSpawn runs before TeamIndex is set so it picks the wrong position.
         // Re-teleport now that the team is assigned.
@@ -216,6 +268,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     private void LateUpdate()
     {
+        LateUpdateShieldRing();
         if (_barRect == null) return;
         if (_cam == null) _cam = Camera.main;
         if (_cam == null) return;
@@ -234,6 +287,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     private void OnHealthChanged(float previous, float current)
     {
         UpdateBar(current);
+    }
+
+    private void OnShieldHPChanged(float previous, float current)
+    {
+        if (_shieldRing != null) _shieldRing.enabled = current > 0f;
     }
 
     private void UpdateBar(float current)
@@ -302,6 +360,49 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         _healthText.overflowMode       = TextOverflowModes.Overflow;
 
         UpdateBar(Health.Value);
+    }
+
+    private void CreateShieldRing()
+    {
+        var go = new GameObject("ShieldRing");
+        go.transform.SetParent(transform);
+        _shieldRing = go.AddComponent<LineRenderer>();
+        _shieldRing.loop              = true;
+        _shieldRing.positionCount     = ShieldRingSegments;
+        _shieldRing.startWidth        = 0.12f;
+        _shieldRing.endWidth          = 0.12f;
+        _shieldRing.useWorldSpace     = true;
+        _shieldRing.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        _shieldRing.receiveShadows    = false;
+
+        var mat = new Material(Shader.Find("Sprites/Default"));
+        mat.color = new Color(0.3f, 0.7f, 1f, 0.85f);
+        _shieldRing.material = mat;
+
+        float radius = 1.0f;
+        for (int i = 0; i < ShieldRingSegments; i++)
+        {
+            float angle = (float)i / ShieldRingSegments * Mathf.PI * 2f;
+            _shieldRing.SetPosition(i, new Vector3(
+                transform.position.x + Mathf.Cos(angle) * radius,
+                transform.position.y + 0.5f,
+                transform.position.z + Mathf.Sin(angle) * radius));
+        }
+        _shieldRing.enabled = false;
+    }
+
+    private void LateUpdateShieldRing()
+    {
+        if (_shieldRing == null || !_shieldRing.enabled) return;
+        float radius = 1.0f;
+        for (int i = 0; i < ShieldRingSegments; i++)
+        {
+            float angle = (float)i / ShieldRingSegments * Mathf.PI * 2f;
+            _shieldRing.SetPosition(i, new Vector3(
+                transform.position.x + Mathf.Cos(angle) * radius,
+                transform.position.y + 0.5f,
+                transform.position.z + Mathf.Sin(angle) * radius));
+        }
     }
 
     private static Canvas GetOrCreateHudCanvas()

@@ -13,16 +13,17 @@ GameObject:
   - component: {fileID: 4848364318576641067}
   - component: {fileID: 2559148639752182538}
   - component: {fileID: 8852485599357688428}
-  - component: {fileID: 3758207430799448634}
-  - component: {fileID: 3583912591448087394}
-  - component: {fileID: 9065941875211792016}
   - component: {fileID: 9173006632108536911}
-  - component: {fileID: 6461678683479735571}
-  - component: {fileID: -4491582939355880280}
-  - component: {fileID: 865988660502746192}
-  - component: {fileID: -5026939236243210125}
   - component: {fileID: -1061012809071916253}
   - component: {fileID: 1984488755415209783}
+  - component: {fileID: 3583912591448087394}
+  - component: {fileID: -4491582939355880280}
+  - component: {fileID: 6461678683479735571}
+  - component: {fileID: 9065941875211792016}
+  - component: {fileID: -5026939236243210125}
+  - component: {fileID: 865988660502746192}
+  - component: {fileID: -787938802414070686}
+  - component: {fileID: -4618408539499464514}
   m_Layer: 0
   m_Name: GamePlayer
   m_TagString: Untagged
@@ -151,52 +152,70 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
---- !u!114 &3758207430799448634
+--- !u!114 &9173006632108536911
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3733706192183858795}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e96cb6065543e43c4a752faaa1468eb1, type: 3}
+  m_Script: {fileID: 11500000, guid: 259909e2366bd4e1aa64c6ecec937ab1, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Components.NetworkTransform
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
   ShowTopMostFoldoutHeaderGroup: 1
-  NetworkTransformExpanded: 0
-  AutoOwnerAuthorityTickOffset: 1
-  PositionInterpolationType: 0
-  RotationInterpolationType: 0
-  ScaleInterpolationType: 0
-  PositionLerpSmoothing: 1
-  PositionMaxInterpolationTime: 0.1
-  RotationLerpSmoothing: 1
-  RotationMaxInterpolationTime: 0.1
-  ScaleLerpSmoothing: 1
-  ScaleMaxInterpolationTime: 0.1
-  AuthorityMode: 0
-  TickSyncChildren: 0
-  UseUnreliableDeltas: 0
-  SyncPositionX: 1
-  SyncPositionY: 1
-  SyncPositionZ: 1
-  SyncRotAngleX: 1
-  SyncRotAngleY: 1
-  SyncRotAngleZ: 1
-  SyncScaleX: 1
-  SyncScaleY: 1
-  SyncScaleZ: 1
-  PositionThreshold: 0.001
-  RotAngleThreshold: 0.01
-  ScaleThreshold: 0.01
-  UseQuaternionSynchronization: 0
-  UseQuaternionCompression: 0
-  UseHalfFloatPrecision: 0
-  InLocalSpace: 0
-  SwitchTransformSpaceWhenParented: 0
-  Interpolate: 1
-  SlerpPosition: 0
+  maxHealth: 150
+  respawnDelay: 5
+  Health:
+    m_InternalValue: 150
+  ShieldHP:
+    m_InternalValue: 0
+  passiveRegenPerSecond: 2
+  spawnRegenPerTick: 10
+  spawnRegenTickRate: 4
+--- !u!114 &-1061012809071916253
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3733706192183858795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cf9414d4b842468699fe3359665d351, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerMana
+  ShowTopMostFoldoutHeaderGroup: 1
+  baseMana: 200
+  manaRegenPerSecond: 3
+  spawnRegenPerTick: 5
+  spawnRegenTickRate: 4
+  Mana:
+    m_InternalValue: 0
+  MaxMana:
+    m_InternalValue: 150
+--- !u!114 &1984488755415209783
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3733706192183858795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d1afdf49c81749d0a18df531ca977be, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerXP
+  ShowTopMostFoldoutHeaderGroup: 1
+  xpPerLevel: 20
+  passiveXpPerSecond: 0.1
+  healthLevelUpRatio: 0.1
+  manaLevelUpRatio: 0.1
+  XP:
+    m_InternalValue: 0
+  Level:
+    m_InternalValue: 1
 --- !u!114 &3583912591448087394
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -220,6 +239,47 @@ MonoBehaviour:
     m_InternalValue: {r: 1, g: 1, b: 1, a: 1}
   CharacterIndex:
     m_InternalValue: 0
+--- !u!195 &-4491582939355880280
+NavMeshAgent:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3733706192183858795}
+  m_Enabled: 1
+  m_AgentTypeID: 0
+  m_Radius: 0.5
+  m_Speed: 7
+  m_Acceleration: 99999
+  avoidancePriority: 50
+  m_AngularSpeed: 999
+  m_StoppingDistance: 0
+  m_AutoTraverseOffMeshLink: 1
+  m_AutoBraking: 0
+  m_AutoRepath: 1
+  m_Height: 1
+  m_BaseOffset: 1
+  m_WalkableMask: 4294967295
+  m_ObstacleAvoidanceType: 0
+--- !u!114 &6461678683479735571
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3733706192183858795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fcf26266df97145cf87ec49a578ae2db, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AutoAttacker
+  ShowTopMostFoldoutHeaderGroup: 1
+  autoAttackRange: 12
+  autoAttackCooldown: 1
+  windUpDuration: 0.25
+  projectileSpeed: 18
+  damage: 20
+  autoAttackProjectilePrefab: {fileID: 8423999069295360159, guid: b1004cecac4544e1886d85389e4a8b7f, type: 3}
 --- !u!114 &9065941875211792016
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -243,92 +303,6 @@ MonoBehaviour:
   animationDelay: 0.4
   launchOffset: 1
   manaCost: 20
---- !u!114 &9173006632108536911
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3733706192183858795}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 259909e2366bd4e1aa64c6ecec937ab1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
-  ShowTopMostFoldoutHeaderGroup: 1
-  maxHealth: 150
-  respawnDelay: 5
-  Health:
-    m_InternalValue: 150
-  passiveRegenPerSecond: 2
-  spawnRegenPerTick: 10
-  spawnRegenTickRate: 4
---- !u!114 &6461678683479735571
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3733706192183858795}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fcf26266df97145cf87ec49a578ae2db, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::AutoAttacker
-  ShowTopMostFoldoutHeaderGroup: 1
-  autoAttackRange: 12
-  autoAttackCooldown: 1
-  windUpDuration: 0.25
-  projectileSpeed: 18
-  damage: 20
-  autoAttackProjectilePrefab: {fileID: 8423999069295360159, guid: b1004cecac4544e1886d85389e4a8b7f, type: 3}
---- !u!195 &-4491582939355880280
-NavMeshAgent:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3733706192183858795}
-  m_Enabled: 1
-  m_AgentTypeID: 0
-  m_Radius: 0.5
-  m_Speed: 7
-  m_Acceleration: 99999
-  avoidancePriority: 50
-  m_AngularSpeed: 999
-  m_StoppingDistance: 0
-  m_AutoTraverseOffMeshLink: 1
-  m_AutoBraking: 0
-  m_AutoRepath: 1
-  m_Height: 1
-  m_BaseOffset: 1
-  m_WalkableMask: 4294967295
-  m_ObstacleAvoidanceType: 0
---- !u!114 &865988660502746192
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3733706192183858795}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 63fba661292fd4a38bdcd8163350297e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TripleShotAbility
-  ShowTopMostFoldoutHeaderGroup: 1
-  projectilePrefab: {fileID: 8423999069295360159, guid: 45d6fab729d164120b928c683db062bc, type: 3}
-  firePoint: {fileID: 8689417454509932622}
-  projectileSpeed: 20
-  maxRange: 15
-  damage: 20
-  cooldown: 4
-  delayBetweenShots: 0.15
-  launchOffset: 0.5
-  orbitRadius: 1.5
-  orbitSpeed: 360
-  orbitBallSize: 0.9
-  manaCost: 30
 --- !u!114 &-5026939236243210125
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -350,7 +324,7 @@ MonoBehaviour:
   arrowHeadLength: 1.2
   arrowHeadWidth: 0.6
   manaCost: 10
---- !u!114 &-1061012809071916253
+--- !u!114 &865988660502746192
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -359,19 +333,23 @@ MonoBehaviour:
   m_GameObject: {fileID: 3733706192183858795}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0cf9414d4b842468699fe3359665d351, type: 3}
+  m_Script: {fileID: 11500000, guid: 63fba661292fd4a38bdcd8163350297e, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerMana
+  m_EditorClassIdentifier: Assembly-CSharp::TripleShotAbility
   ShowTopMostFoldoutHeaderGroup: 1
-  baseMana: 200
-  manaRegenPerSecond: 4
-  spawnRegenPerTick: 5
-  spawnRegenTickRate: 4
-  Mana:
-    m_InternalValue: 0
-  MaxMana:
-    m_InternalValue: 200
---- !u!114 &1984488755415209783
+  projectilePrefab: {fileID: 8423999069295360159, guid: 45d6fab729d164120b928c683db062bc, type: 3}
+  firePoint: {fileID: 8689417454509932622}
+  projectileSpeed: 20
+  maxRange: 15
+  damage: 20
+  cooldown: 5
+  delayBetweenShots: 0.15
+  launchOffset: 0.5
+  orbitRadius: 1.5
+  orbitSpeed: 360
+  orbitBallSize: 0.9
+  manaCost: 30
+--- !u!114 &-787938802414070686
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -380,18 +358,38 @@ MonoBehaviour:
   m_GameObject: {fileID: 3733706192183858795}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7d1afdf49c81749d0a18df531ca977be, type: 3}
+  m_Script: {fileID: 11500000, guid: 22e4d9121639f4246aa1b1100e98d6ae, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerXP
+  m_EditorClassIdentifier: Assembly-CSharp::FanShotAbility
   ShowTopMostFoldoutHeaderGroup: 1
-  xpPerLevel: 20
-  passiveXpPerSecond: 0.1
-  healthLevelUpRatio: 0.1
-  manaLevelUpRatio: 0.1
-  XP:
-    m_InternalValue: 0
-  Level:
-    m_InternalValue: 1
+  projectilePrefab: {fileID: 8423999069295360159, guid: 460d6553865ca48cf9b03e801a4b64db, type: 3}
+  firePoint: {fileID: 8689417454509932622}
+  projectileSpeed: 14
+  maxRange: 20
+  damage: 20
+  cooldown: 5
+  launchOffset: 0.5
+  manaCost: 30
+  orbitRadius: 1.5
+  orbitSpeed: 360
+  orbitBallSize: 0.75
+--- !u!114 &-4618408539499464514
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3733706192183858795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fffd11da015434478a292d31f7b0f3b5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ShieldAbility
+  ShowTopMostFoldoutHeaderGroup: 1
+  shieldAmount: 50
+  shieldDuration: 3
+  cooldown: 8
+  manaCost: 10
 --- !u!1 &8598427067344695647
 GameObject:
   m_ObjectHideFlags: 0

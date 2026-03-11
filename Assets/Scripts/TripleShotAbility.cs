@@ -23,15 +23,16 @@ public class TripleShotAbility : NetworkBehaviour
     public float CooldownFraction  => Mathf.Clamp01((_nextFireTime - Time.time) / cooldown);
     public float CooldownRemaining => Mathf.Max(0f, _nextFireTime - Time.time);
 
-    private readonly Plane _groundPlane = new Plane(Vector3.up, Vector3.zero);
-    private Camera       _mainCamera;
-    private float        _nextFireTime;
-    private bool         _charging;
-    private float        _orbitAngle;
-    private Coroutine    _fireCoroutine;
-    private PlayerHealth _health;
-    private PlayerMana   _mana;
-    private PlayerXP     _xp;
+    private readonly Plane   _groundPlane = new Plane(Vector3.up, Vector3.zero);
+    private Camera           _mainCamera;
+    private float            _nextFireTime;
+    private bool             _charging;
+    private float            _orbitAngle;
+    private Coroutine        _fireCoroutine;
+    private PlayerHealth     _health;
+    private PlayerMana       _mana;
+    private PlayerXP         _xp;
+    private PlayerController _pc;
 
     private GameObject[] _orbitBalls;
     private LineRenderer  _rangeRing;
@@ -40,12 +41,14 @@ public class TripleShotAbility : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        if (!IsOwner) { enabled = false; return; }
-        _mana = GetComponent<PlayerMana>();
-        _xp   = GetComponent<PlayerXP>();
+        _pc = GetComponent<PlayerController>();
         CreateRangeRing();
         CreateTrajectoryLine();
         CreateOrbitBalls();
+
+        if (!IsOwner) { enabled = false; return; }
+        _mana = GetComponent<PlayerMana>();
+        _xp   = GetComponent<PlayerXP>();
     }
 
     private void Start()
@@ -57,6 +60,7 @@ public class TripleShotAbility : NetworkBehaviour
     private void Update()
     {
         if (Keyboard.current == null || Mouse.current == null) return;
+        if (_pc != null && _pc.CharacterIndex.Value != 1) { CancelCharge(); return; }
         if (_health == null) _health = GetComponent<PlayerHealth>();
         if (_health != null && _health.IsDead) return;
 
@@ -108,8 +112,35 @@ public class TripleShotAbility : NetworkBehaviour
     {
         _charging               = false;
         SetOrbitBallsVisible(false);
-        _rangeRing.enabled      = false;
-        _trajectoryLine.enabled = false;
+        if (_rangeRing != null)      _rangeRing.enabled      = false;
+        if (_trajectoryLine != null) _trajectoryLine.enabled = false;
+        BroadcastChargeEndRpc();
+    }
+
+    [Rpc(SendTo.NotOwner)]
+    private void BroadcastChargeStartRpc(Vector3 pos)
+    {
+        StartCoroutine(NonOwnerOrbitSpin());
+    }
+
+    [Rpc(SendTo.NotOwner)]
+    private void BroadcastChargeEndRpc()
+    {
+        SetOrbitBallsVisible(false);
+    }
+
+    private IEnumerator NonOwnerOrbitSpin()
+    {
+        float spinDuration = 360f / orbitSpeed;
+        float spinEnd      = Time.time + spinDuration;
+        SetOrbitBallsVisible(true);
+        while (Time.time < spinEnd)
+        {
+            _orbitAngle += orbitSpeed * Time.deltaTime;
+            UpdateOrbitBalls();
+            yield return null;
+        }
+        SetOrbitBallsVisible(false);
     }
 
     private void SetOrbitBallsVisible(bool visible)
@@ -148,6 +179,7 @@ public class TripleShotAbility : NetworkBehaviour
 
         // Show balls and spin 360°
         SetOrbitBallsVisible(true);
+        BroadcastChargeStartRpc(transform.position);
         float spinDuration = 360f / orbitSpeed;
         float spinEnd      = Time.time + spinDuration;
         while (Time.time < spinEnd)

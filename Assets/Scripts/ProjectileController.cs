@@ -24,7 +24,8 @@ public class ProjectileController : NetworkBehaviour
     [SerializeField] private float hitRadius = 0.6f;
 
     // Called by server after NetworkObject.Spawn()
-    public void Initialize(Vector3 endPosition, float speed, ulong shooterClientId, float damage)
+    public void Initialize(Vector3 endPosition, float speed, ulong shooterClientId, float damage,
+                           float sizeMultiplier = 1f)
     {
         endPosition.y    = transform.position.y;  // lock to spawn height — XZ travel only
         _netEndPos.Value = endPosition;
@@ -32,6 +33,8 @@ public class ProjectileController : NetworkBehaviour
         _netActive.Value = true;
         _shooterClientId = shooterClientId;
         _damage          = damage;
+        if (!Mathf.Approximately(sizeMultiplier, 1f))
+            transform.localScale *= sizeMultiplier;
     }
 
     public override void OnNetworkSpawn() { }

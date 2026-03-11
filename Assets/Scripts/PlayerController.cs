@@ -63,6 +63,9 @@ public class PlayerController : NetworkBehaviour
     private const float  IndicatorExpandDuration = 0.2f;
     private const float  IndicatorFullRadius     = 0.45f;
 
+    // ── Base scale (stored before character appearance modifies it) ───────────
+    private Vector3 _baseScale;
+
     // ── Spawn helpers ─────────────────────────────────────────────────────────
     private static readonly Vector3[] TeamSpawnBase =
     {
@@ -107,9 +110,11 @@ public class PlayerController : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         GameObjectRegistry.Players.Add(this);
-        Position.OnValueChanged    += OnPositionChanged;
-        PlayerColor.OnValueChanged += OnPlayerColorChanged;
+        Position.OnValueChanged       += OnPositionChanged;
+        PlayerColor.OnValueChanged    += OnPlayerColorChanged;
+        CharacterIndex.OnValueChanged += OnCharacterIndexChanged;
 
+        _baseScale = transform.localScale;
         _agent = GetComponent<NavMeshAgent>();
 
         if (IsServer)
@@ -133,6 +138,7 @@ public class PlayerController : NetworkBehaviour
         }
 
         ApplyPlayerColor(PlayerColor.Value);
+        ApplyCharacterAppearance(CharacterIndex.Value);
 
         if (!IsOwner)
         {
@@ -170,8 +176,9 @@ public class PlayerController : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         GameObjectRegistry.Players.Remove(this);
-        Position.OnValueChanged    -= OnPositionChanged;
-        PlayerColor.OnValueChanged -= OnPlayerColorChanged;
+        Position.OnValueChanged       -= OnPositionChanged;
+        PlayerColor.OnValueChanged    -= OnPlayerColorChanged;
+        CharacterIndex.OnValueChanged -= OnCharacterIndexChanged;
 
         if (_clickIndicator != null)
             Destroy(_clickIndicator.gameObject);
@@ -185,6 +192,26 @@ public class PlayerController : NetworkBehaviour
     }
 
     private void OnPlayerColorChanged(Color previous, Color current) => ApplyPlayerColor(current);
+
+    private void OnCharacterIndexChanged(int previous, int next)
+    {
+        ApplyCharacterAppearance(next);
+        if (IsServer)
+            GetComponent<PlayerHealth>()?.SetBaseHealth(next);
+    }
+
+    private void ApplyCharacterAppearance(int index)
+    {
+        float xzMult = index == 0 ? 1.15f : 0.85f;
+        transform.localScale = new Vector3(
+            _baseScale.x * xzMult,
+            _baseScale.y,
+            _baseScale.z * xzMult);
+
+        moveSpeed = index == 0 ? 8f : 10f;
+        if (_agent != null && _agent.enabled)
+            _agent.speed = moveSpeed;
+    }
 
     private void ApplyPlayerColor(Color color)
     {

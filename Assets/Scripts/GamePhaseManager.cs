@@ -161,6 +161,13 @@ public class GamePhaseManager : NetworkBehaviour
             if (pc == null) continue;
             pc.TeleportTo(LobbySpawnCenter);
             pc.SetTeamServerSide(-1);
+
+            var xp = client.PlayerObject?.GetComponent<PlayerXP>();
+            xp?.ResetForLobby();
+
+            int charIdx = pc.CharacterIndex.Value;
+            var health  = client.PlayerObject?.GetComponent<PlayerHealth>();
+            health?.ResetToBase(charIdx);
         }
 
         _playersInStartZone.Clear();

@@ -31,6 +31,7 @@ public class DashAbility : NetworkBehaviour
     private PlayerController _pc;
     private PlayerHealth     _health;
     private PlayerMana       _mana;
+    private PlayerXP         _xp;
     private NavMeshAgent     _agent;
     private LineRenderer     _arrow;
 
@@ -40,18 +41,22 @@ public class DashAbility : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        _pc    = GetComponent<PlayerController>();
+        _agent = GetComponent<NavMeshAgent>();
+        CreateArrowVisual();
+
         if (!IsOwner) { enabled = false; return; }
-        _pc     = GetComponent<PlayerController>();
-        _agent  = GetComponent<NavMeshAgent>();
         _health = GetComponent<PlayerHealth>();
         _mana   = GetComponent<PlayerMana>();
-        CreateArrowVisual();
+        _xp     = GetComponent<PlayerXP>();
     }
 
     private void Update()
     {
         if (Keyboard.current == null) return;
         if (_dashCoroutine != null) return;
+
+        if (_pc != null && _pc.CharacterIndex.Value != 1) { CancelAim(); return; }
 
         if (_health == null) _health = GetComponent<PlayerHealth>();
         if (_health != null && _health.IsDead)
@@ -85,24 +90,73 @@ public class DashAbility : NetworkBehaviour
 
             if (released)
             {
-                Vector3 dir = GetAimDirection();
+                Vector3 dir           = GetAimDirection();
+                float   effectiveDist = GetEffectiveDashDistance(dir);
                 CancelAim();
                 _nextDashTime  = Time.time + cooldown;
                 _mana?.SpendManaServerRpc(manaCost);
-                _dashCoroutine = StartCoroutine(ExecuteDash(dir));
+                _dashCoroutine = StartCoroutine(ExecuteDash(dir, effectiveDist));
             }
         }
+    }
+
+    private float GetEffectiveDashDistance(Vector3 dir)
+    {
+        float xpLevel     = _xp?.Level.Value ?? 1;
+        float scaledDist  = dashDistance * (1f + 0.05f * (xpLevel - 1));
+
+        // In P&C mode clamp to cursor distance so the player dashes to the cursor if closer
+        if (!GameSettings.UseWasd && Mouse.current != null)
+        {
+            Vector2 mousePos = Mouse.current.position.ReadValue();
+            Ray ray = Camera.main.ScreenPointToRay(new Vector3(mousePos.x, mousePos.y, 0f));
+            if (_groundPlane.Raycast(ray, out float dist))
+            {
+                Vector3 hit        = ray.GetPoint(dist);
+                float   cursorDist = Vector3.Distance(
+                    new Vector3(transform.position.x, 0f, transform.position.z),
+                    new Vector3(hit.x, 0f, hit.z));
+                scaledDist = Mathf.Min(cursorDist, scaledDist);
+            }
+        }
+        return scaledDist;
     }
 
     private void StartAim()
     {
         _aiming = true;
         _arrow.enabled = true;
+        Vector3 dir = GetAimDirection();
+        BroadcastAimStartRpc(new Vector3(transform.position.x, 0.05f, transform.position.z), dir);
     }
 
     public void CancelAim()
     {
         _aiming = false;
+        if (_arrow != null) _arrow.enabled = false;
+        BroadcastAimEndRpc();
+    }
+
+    [Rpc(SendTo.NotOwner)]
+    private void BroadcastAimStartRpc(Vector3 origin, Vector3 dir)
+    {
+        if (_arrow == null) return;
+        _arrow.enabled = true;
+        float dist     = dashDistance;
+        Vector3 shaftEnd = origin + dir * (dist - arrowHeadLength);
+        Vector3 tip      = origin + dir * dist;
+        Vector3 perp     = new Vector3(-dir.z, 0f, dir.x) * (arrowHeadWidth * 0.5f);
+        _arrow.SetPosition(0, origin);
+        _arrow.SetPosition(1, shaftEnd);
+        _arrow.SetPosition(2, shaftEnd + perp);
+        _arrow.SetPosition(3, tip);
+        _arrow.SetPosition(4, shaftEnd - perp);
+        _arrow.SetPosition(5, shaftEnd);
+    }
+
+    [Rpc(SendTo.NotOwner)]
+    private void BroadcastAimEndRpc()
+    {
         if (_arrow != null) _arrow.enabled = false;
     }
 
@@ -140,11 +194,13 @@ public class DashAbility : NetworkBehaviour
 
     private void UpdateArrow()
     {
-        Vector3 dir = GetAimDirection();
-        Vector3 origin = new Vector3(transform.position.x, 0.05f, transform.position.z);
+        float   xpLevel  = _xp?.Level.Value ?? 1;
+        float   dist     = dashDistance * (1f + 0.05f * (xpLevel - 1));
+        Vector3 dir      = GetAimDirection();
+        Vector3 origin   = new Vector3(transform.position.x, 0.05f, transform.position.z);
 
-        Vector3 shaftEnd = origin + dir * (dashDistance - arrowHeadLength);
-        Vector3 tip      = origin + dir * dashDistance;
+        Vector3 shaftEnd = origin + dir * (dist - arrowHeadLength);
+        Vector3 tip      = origin + dir * dist;
         Vector3 perp     = new Vector3(-dir.z, 0f, dir.x) * (arrowHeadWidth * 0.5f);
 
         _arrow.SetPosition(0, origin);
@@ -155,16 +211,17 @@ public class DashAbility : NetworkBehaviour
         _arrow.SetPosition(5, shaftEnd);
     }
 
-    private IEnumerator ExecuteDash(Vector3 dir)
+    private IEnumerator ExecuteDash(Vector3 dir, float effectiveDist)
     {
         GetComponent<AutoAttacker>()?.CancelAutoAttack();
         GetComponent<TripleShotAbility>()?.CancelCharge();
+        GetComponent<FanShotAbility>()?.CancelCharge();
 
         Vector3 startPos    = transform.position;
-        Vector3 rawEnd      = startPos + dir * dashDistance;
+        Vector3 rawEnd      = startPos + dir * effectiveDist;
         Vector3 endPos      = startPos;
 
-        if (NavMesh.SamplePosition(rawEnd, out NavMeshHit hit, dashDistance, NavMesh.AllAreas))
+        if (NavMesh.SamplePosition(rawEnd, out NavMeshHit hit, effectiveDist, NavMesh.AllAreas))
             endPos = new Vector3(hit.position.x, startPos.y, hit.position.z);
 
         float totalDur = dashDuration + castLockDuration;

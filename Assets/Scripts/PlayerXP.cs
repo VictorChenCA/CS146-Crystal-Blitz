@@ -47,6 +47,13 @@ public class PlayerXP : NetworkBehaviour
         }
     }
 
+    public void ResetForLobby()
+    {
+        if (!IsServer) return;
+        XP.Value    = 0f;
+        Level.Value = 1;
+    }
+
     public void GainXP(float amount)
     {
         if (!IsServer || !IsInGame) return;
