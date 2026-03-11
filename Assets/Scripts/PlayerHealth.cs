@@ -63,6 +63,8 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     // Shared screen-space canvas for all health bars (created once).
     private static Canvas _hudCanvas;
 
+    [SerializeField] private Color shieldBarColor = new Color(0.62f, 0.62f, 0.62f, 1f);
+
     // ── Regen (server-only) ───────────────────────────────────────────────────
     [SerializeField] private float passiveRegenPerSecond = 2f;
     [SerializeField] private float spawnRegenPerTick     = 10f;
@@ -294,26 +296,29 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     private void UpdateShieldBar(float shield)
     {
         if (_shieldFillRect == null) return;
-        float shieldFrac = maxHealth > 0f ? Mathf.Clamp01(shield / maxHealth) : 0f;
-        _shieldFillRect.anchorMin = new Vector2(1f - shieldFrac, 0f);
-        _shieldFillRect.anchorMax = new Vector2(1f, 1f);
+        bool  atFull     = Health.Value >= maxHealth;
+        float effMax     = atFull ? (maxHealth + shield) : maxHealth;
+        if (effMax <= 0f) return;
+        float greenFrac  = Mathf.Clamp01(Health.Value / effMax);
+        float shieldFrac = Mathf.Clamp01(shield / effMax);
+        _shieldFillRect.anchorMin = new Vector2(greenFrac, 0f);
+        _shieldFillRect.anchorMax = new Vector2(Mathf.Min(1f, greenFrac + shieldFrac), 1f);
     }
 
     private void UpdateBar(float current)
     {
-        if (_greenFillRect != null)
-        {
-            float t = Mathf.Clamp01(current / maxHealth);
-            _greenFillRect.anchorMax = new Vector2(t, 1f);
-        }
+        float shield = ShieldHP.Value;
+        bool  atFull = current >= maxHealth;
+        float effMax = (atFull && shield > 0f) ? (maxHealth + shield) : maxHealth;
+        float gFrac  = effMax > 0f ? Mathf.Clamp01(current / effMax) : 0f;
 
-        UpdateShieldBar(ShieldHP.Value);
+        if (_greenFillRect != null)
+            _greenFillRect.anchorMax = new Vector2(gFrac, 1f);
+
+        UpdateShieldBar(shield);
 
         if (_healthText != null)
-        {
-            int total = Mathf.RoundToInt(current + ShieldHP.Value);
-            _healthText.text = $"{total}/{Mathf.RoundToInt(maxHealth)}";
-        }
+            _healthText.text = $"{Mathf.RoundToInt(current + shield)}/{Mathf.RoundToInt(effMax)}";
     }
 
     private void DestroyBar()
@@ -353,7 +358,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         _shieldFillRect.anchorMin = new Vector2(1f, 0f);  // starts collapsed at right edge
         _shieldFillRect.anchorMax = new Vector2(1f, 1f);
         _shieldFillRect.offsetMin = _shieldFillRect.offsetMax = Vector2.zero;
-        shieldGO.AddComponent<Image>().color = new Color(0.62f, 0.62f, 0.62f, 1f);
+        shieldGO.AddComponent<Image>().color = shieldBarColor;
 
         // Layer 4 — green fill (current health); drawn on top of grey so overlap looks correct
         var greenGO      = new GameObject("GreenFill");

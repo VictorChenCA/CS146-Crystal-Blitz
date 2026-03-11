@@ -221,14 +221,13 @@ public class GameManager : MonoBehaviour
     private float DrawLobbyBanner(GamePhaseManager gpm, float startY)
     {
         float sw = Screen.width;
-        float w  = 700f, h = 90f;
+        float w  = 700f, h = 50f;
         float x  = (sw - w) * 0.5f;
 
         int total = NetworkManager.Singleton != null
             ? NetworkManager.Singleton.ConnectedClientsList.Count : 1;
 
-        string msg = $"Walk into a colored zone to pick your team!\n" +
-                     $"{gpm.PlayersReadyCount.Value}/{total} players ready in start zone";
+        string msg = $"{gpm.PlayersReadyCount.Value}/{total} players ready in start zone";
 
         GUI.Box(new Rect(x, startY, w, h), msg, _announcementStyle);
         return startY + h + 6f;
@@ -803,20 +802,24 @@ public class GameManager : MonoBehaviour
 
         // ── Health bar ────────────────────────────────────────────────────
         float barY       = colTop + abilitySize + barGap;
-        float hp         = health != null ? health.HealthFraction : 1f;
+        float curHp      = health?.CurrentHealth ?? 0f;
         float shieldVal  = health?.ShieldHP.Value ?? 0f;
         float maxHp      = health?.MaxHealth ?? 100f;
-        float shieldFrac = maxHp > 0f ? Mathf.Clamp01(shieldVal / maxHp) : 0f;
-        DrawRect(abX, barY, colW, barH, new Color(0.08f, 0.08f, 0.08f, 0.9f));                          // background
-        if (hp < 1f)         DrawRect(abX + colW * hp, barY, colW * (1f - hp), barH, new Color(0.72f, 0.14f, 0.14f, 1f));   // red (missing)
-        if (shieldFrac > 0f) DrawRect(abX + colW * (1f - shieldFrac), barY, colW * shieldFrac, barH, new Color(0.62f, 0.62f, 0.62f, 1f)); // grey (shield, right side)
-        if (hp > 0f)         DrawRect(abX, barY, colW * hp, barH, new Color(0.2f, 0.78f, 0.2f, 1f));   // green (on top)
+        bool  atFull     = curHp >= maxHp;
+        float effMax     = (atFull && shieldVal > 0f) ? (maxHp + shieldVal) : maxHp;
+        float greenFrac  = effMax > 0f ? Mathf.Clamp01(curHp / effMax) : 0f;
+        float shieldFrac = effMax > 0f ? Mathf.Clamp01(shieldVal / effMax) : 0f;
+        float afterGrey  = Mathf.Min(1f, greenFrac + shieldFrac);
+        DrawRect(abX, barY, colW, barH, new Color(0.08f, 0.08f, 0.08f, 0.9f));                                               // background
+        if (afterGrey < 1f)  DrawRect(abX + colW * afterGrey, barY, colW * (1f - afterGrey), barH, new Color(0.72f, 0.14f, 0.14f, 1f)); // red (missing)
+        if (shieldFrac > 0f) DrawRect(abX + colW * greenFrac,  barY, colW * shieldFrac,       barH, new Color(0.62f, 0.62f, 0.62f, 1f)); // grey (shield)
+        if (greenFrac > 0f)  DrawRect(abX,                     barY, colW * greenFrac,        barH, new Color(0.2f, 0.78f, 0.2f, 1f));   // green (health)
 
         // Health numeric label — drawn over the bar
         _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
         _levelStyle.alignment = TextAnchor.MiddleCenter;
-        int    hpTotal = Mathf.CeilToInt((health?.CurrentHealth ?? 0) + shieldVal);
-        string hpLabel = $"{hpTotal} / {Mathf.CeilToInt(maxHp)}";
+        int    hpTotal = Mathf.CeilToInt(curHp + shieldVal);
+        string hpLabel = $"{hpTotal} / {Mathf.CeilToInt(effMax)}";
         GUI.Label(new Rect(abX, barY, colW, barH), hpLabel, _levelStyle);
 
         // ── Mana bar ──────────────────────────────────────────────────────

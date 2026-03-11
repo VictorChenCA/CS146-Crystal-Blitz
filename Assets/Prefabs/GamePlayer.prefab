@@ -171,6 +171,7 @@ MonoBehaviour:
     m_InternalValue: 150
   ShieldHP:
     m_InternalValue: 0
+  shieldBarColor: {r: 0.7969918, g: 0.8490566, b: 0.80330485, a: 1}
   passiveRegenPerSecond: 2
   spawnRegenPerTick: 10
   spawnRegenTickRate: 4
@@ -337,7 +338,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShieldAbility
   ShowTopMostFoldoutHeaderGroup: 1
-  shieldAmount: 50
+  shieldAmount: 40
   shieldDuration: 3
   cooldown: 8
   manaCost: 10
