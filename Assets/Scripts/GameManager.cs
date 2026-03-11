@@ -75,6 +75,25 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Texture2D _iconRangerW;
     [SerializeField] private Texture2D _iconRangerE;
 
+    // ── Ability Tooltip Data ──────────────────────────────────────────────────
+    private struct AbilityTooltipData
+    {
+        public string Name;
+        public string Stat;        // damage / effect line, "" to hide
+        public string Description;
+    }
+
+    private static readonly AbilityTooltipData[] TankTooltips = {
+        new() { Name="Heavy Round", Stat="25 dmg",         Description="Fires a large, slow straight projectile toward a target point."  },
+        new() { Name="Bulwark",     Stat="50 shield · 5s", Description="Grants a shield that absorbs damage before health."              },
+        new() { Name="Buckshot",    Stat="15 dmg × 5",     Description="Fires 5 projectiles in a wide fan arc."                          },
+    };
+    private static readonly AbilityTooltipData[] RangerTooltips = {
+        new() { Name="Swift Shot",  Stat="25 dmg",         Description="Fires a small, fast straight projectile toward a target point."  },
+        new() { Name="Blink Step",  Stat="",               Description="Dashes in the aimed direction."                                  },
+        new() { Name="Burst Fire",  Stat="15 dmg × 3",     Description="Fires 3 projectiles in rapid sequence along the same direction." },
+    };
+
     // ── GUIStyles (lazy-initialized once) ────────────────────────────────────
     private GUIStyle _titleStyle;
     private GUIStyle _subtitleStyle;
@@ -92,6 +111,7 @@ public class GameManager : MonoBehaviour
     private GUIStyle _segInactiveStyle;
     private GUIStyle _panelLabelStyle;
     private GUIStyle _textFieldStyle;
+    private GUIStyle _tooltipStyle;
     private bool _stylesInitialized;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1169,6 +1189,27 @@ public class GameManager : MonoBehaviour
                 keybind3);
         }
 
+        // ── Slot hover tooltip ────────────────────────────────────────────
+        Vector2 mouse = Event.current.mousePosition;
+        int hoveredSlot = -1;
+        if (new Rect(abX,  colTop, abilitySize, abilitySize).Contains(mouse)) hoveredSlot = 0;
+        if (new Rect(ab2X, colTop, abilitySize, abilitySize).Contains(mouse)) hoveredSlot = 1;
+        if (new Rect(ab3X, colTop, abilitySize, abilitySize).Contains(mouse)) hoveredSlot = 2;
+
+        if (hoveredSlot >= 0)
+        {
+            var tooltips = isTank ? TankTooltips : RangerTooltips;
+            float[] slotCenters = { abX + abilitySize * 0.5f, ab2X + abilitySize * 0.5f, ab3X + abilitySize * 0.5f };
+            float[] manaCosts   = {
+                shooter?.ManaCost ?? 0f,
+                isTank ? shield?.ManaCost ?? 0f : dash?.ManaCost ?? 0f,
+                isTank ? fanShot?.ManaCost ?? 0f : tripleShot?.ManaCost ?? 0f,
+            };
+            string[] keybinds = { keybind1, keybind2, keybind3 };
+            DrawAbilityTooltip(slotCenters[hoveredSlot], colTop, s,
+                tooltips[hoveredSlot], keybinds[hoveredSlot], manaCosts[hoveredSlot]);
+        }
+
         // ── Health bar ────────────────────────────────────────────────────
         float barY       = colTop + abilitySize + barGap;
         float curHp      = health?.CurrentHealth ?? 0f;
@@ -1257,6 +1298,71 @@ public class GameManager : MonoBehaviour
         _levelStyle.alignment = TextAnchor.LowerLeft;
         DrawLabelWithOutline(new Rect(x + 3f * s, y, size - 3f * s, size - 3f * s), keybind, 1f);
         _levelStyle.alignment = TextAnchor.UpperCenter;
+    }
+
+    private void DrawAbilityTooltip(float slotCenterX, float slotTopY, float s,
+        AbilityTooltipData data, string keybind, float manaCost)
+    {
+        float pad      = 8f  * s;
+        float panelW   = 200f * s;
+        float nameH    = 16f * s;
+        float metaH    = 14f * s;
+        float statH    = !string.IsNullOrEmpty(data.Stat) ? 14f * s : 0f;
+        float descH    = 36f * s;   // word-wrapped, ~3 lines
+        float panelH   = pad * 2f + nameH + 4f * s + metaH + (statH > 0 ? 4f * s + statH : 0f) + 4f * s + descH;
+
+        float panelX   = Mathf.Clamp(slotCenterX - panelW * 0.5f, 4f, Screen.width - panelW - 4f);
+        float panelY   = slotTopY - panelH - 6f * s;
+
+        // Background
+        DrawRect(panelX, panelY, panelW, panelH, new Color(0.08f, 0.08f, 0.08f, 0.93f));
+        // Top accent line
+        DrawRect(panelX, panelY, panelW, 2f * s, new Color(0.4f, 0.6f, 1f, 0.8f));
+
+        float cx = panelX + pad;
+        float cw = panelW - pad * 2f;
+        float cy = panelY + pad;
+
+        // Ability name
+        var nameStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize  = Mathf.RoundToInt(14f * s),
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.UpperLeft,
+            normal    = { textColor = Color.white },
+        };
+        GUI.Label(new Rect(cx, cy, cw, nameH), data.Name, nameStyle);
+        cy += nameH + 4f * s;
+
+        // Keybind + mana
+        string metaStr = $"[{keybind}]" + (manaCost > 0f ? $"  ·  {Mathf.RoundToInt(manaCost)} Mana" : "");
+        var metaStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize  = Mathf.RoundToInt(11f * s),
+            alignment = TextAnchor.UpperLeft,
+            normal    = { textColor = new Color(0.6f, 0.6f, 0.6f) },
+        };
+        GUI.Label(new Rect(cx, cy, cw, metaH), metaStr, metaStyle);
+        cy += metaH;
+
+        // Stat line (hidden if empty)
+        if (!string.IsNullOrEmpty(data.Stat))
+        {
+            cy += 4f * s;
+            var statStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize  = Mathf.RoundToInt(11f * s),
+                alignment = TextAnchor.UpperLeft,
+                normal    = { textColor = new Color(1f, 0.85f, 0.3f) },
+            };
+            GUI.Label(new Rect(cx, cy, cw, statH), data.Stat, statStyle);
+            cy += statH;
+        }
+
+        // Description
+        cy += 4f * s;
+        _tooltipStyle.fontSize = Mathf.RoundToInt(11f * s);
+        GUI.Label(new Rect(cx, cy, cw, descH), data.Description, _tooltipStyle);
     }
 
     private void DrawLabelWithOutline(Rect r, string text, float px)
@@ -1596,6 +1702,13 @@ public class GameManager : MonoBehaviour
         _textFieldStyle = new GUIStyle(GUI.skin.textField)
         {
             fontSize = 18
+        };
+
+        _tooltipStyle = new GUIStyle(GUI.skin.label)
+        {
+            wordWrap  = true,
+            alignment = TextAnchor.UpperLeft,
+            normal    = { textColor = new Color(0.85f, 0.85f, 0.85f) },
         };
     }
 }
