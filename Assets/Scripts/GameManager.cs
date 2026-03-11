@@ -18,6 +18,7 @@ public class GameManager : MonoBehaviour
     private UIState _settingsPreviousState = UIState.MainMenu;
 
     // ── Networking ───────────────────────────────────────────────────────────
+    private string _playerName = "Player";
     private string _hostIp = "127.0.0.1";
     private ushort _port = 7777;
     [SerializeField] private bool _useRelay = false;
@@ -129,6 +130,7 @@ public class GameManager : MonoBehaviour
         ApplyRenderScale(_qualityIndex);
         Application.targetFrameRate = (int)_targetFps;
         GameKeybinds.Load();
+        _playerName = PlayerPrefs.GetString("playerName", "Player");
     }
 
     private void OnDestroy()
@@ -342,6 +344,18 @@ public class GameManager : MonoBehaviour
         float btnW = 300f, btnH = 60f, btnGap = 20f;
         float btnX = (sw - btnW) * 0.5f;
         float btn1Y = sh * 0.52f;
+
+        // Username
+        float fieldW = 300f, fieldH = 44f;
+        float fieldX = (sw - fieldW) * 0.5f;
+        float fieldY = btn1Y - fieldH - 24f;
+        GUI.Label(new Rect(fieldX, fieldY - 28f, fieldW, 28f), "Username", _labelStyle);
+        string newName = GUI.TextField(new Rect(fieldX, fieldY, fieldW, fieldH), _playerName, 24, _textFieldStyle);
+        if (newName != _playerName)
+        {
+            _playerName = newName;
+            PlayerPrefs.SetString("playerName", _playerName);
+        }
 
         if (GUI.Button(new Rect(btnX, btn1Y, btnW, btnH), "Play", _buttonStyle))
             _state = UIState.ConnectionScreen;
@@ -669,7 +683,7 @@ public class GameManager : MonoBehaviour
         GUI.DrawTexture(new Rect(0, 0, sw, sh), _dimOverlayTex);
 
         // Panel
-        float panelW = Mathf.Min(sw * 0.58f, 720f);
+        float panelW = Mathf.Min(sw * 0.9f, Sz(720f));
         float panelH = sh * 0.82f;
         Rect  panelR = new Rect((sw - panelW) * 0.5f, (sh - panelH) * 0.5f, panelW, panelH);
         GUI.DrawTexture(panelR, _whitePanelTex);
@@ -1101,7 +1115,10 @@ public class GameManager : MonoBehaviour
         float abX       = hudLeft + circleD + circleColGap;
 
         // ── Player name above circle ──────────────────────────────────────
-        string playerName = $"Player {(nm.LocalClientId + 1)}";
+        var localPc = nm.LocalClient?.PlayerObject?.GetComponent<PlayerController>();
+        string playerName = (localPc != null && localPc.PlayerName.Value.Length > 0)
+            ? localPc.PlayerName.Value.ToString()
+            : _playerName;
         float  nameW = 100f * s, nameH = 20f * s;
         _levelStyle.fontSize = Mathf.RoundToInt(16f * s);
         GUI.Label(new Rect(circleC.x - nameW * 0.5f, circleTop - nameH - 2f, nameW, nameH),
