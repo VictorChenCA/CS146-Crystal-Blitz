@@ -1,0 +1,126 @@
+{
+  "classes": [
+    {
+      "id": 0,
+      "name": "Tank",
+      "abilities": [
+        {
+          "slot": "aa",
+          "name": "Homing Round",
+          "input": "Right-click an enemy",
+          "description": "Fires a homing projectile that tracks the target.",
+          "damage": 30,
+          "damageScalingPerLevel": 0.10,
+          "cooldown": 1.5,
+          "windup": 0.3,
+          "range": 12,
+          "manaCost": 0,
+          "notes": "Movement locked during wind-up. In P&C mode, player chases target if out of range."
+        },
+        {
+          "slot": "q",
+          "name": "Heavy Round",
+          "input": "Press Q or left-click",
+          "description": "Fires a large, slow straight projectile.",
+          "damage": null,
+          "damageScalingPerLevel": null,
+          "cooldown": 2.0,
+          "windup": null,
+          "range": 20,
+          "projectileSpeed": 15,
+          "sizeMultiplier": 1.15,
+          "manaCost": 0,
+          "notes": "Bigger and slower than Ranger Q due to 1.15x size multiplier."
+        },
+        {
+          "slot": "w",
+          "name": "Bulwark",
+          "input": "Hold W (P&C) / Hold Shift (WASD), release to activate",
+          "description": "Instantly grants Shield HP that absorbs damage before health.",
+          "shieldHp": 50,
+          "duration": 5.0,
+          "cooldown": 12.0,
+          "manaCost": 10,
+          "notes": "Shield is shown as a blue ring. Absorbed independently from health."
+        },
+        {
+          "slot": "e",
+          "name": "Buckshot",
+          "input": "Hold E to charge, release to fire",
+          "description": "Fires 5 projectiles in a fan spread.",
+          "projectileCount": 5,
+          "spreadAngles": [-40, -20, 0, 20, 40],
+          "damage": 15,
+          "damageScalingPerLevel": 0.10,
+          "range": 20,
+          "projectileSpeed": 15,
+          "cooldown": 10.0,
+          "manaCost": 30,
+          "notes": "Right-click cancels."
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "Ranger",
+      "abilities": [
+        {
+          "slot": "aa",
+          "name": "Homing Round",
+          "input": "Right-click an enemy",
+          "description": "Fires a homing projectile that tracks the target.",
+          "damage": 30,
+          "damageScalingPerLevel": 0.10,
+          "cooldown": 1.5,
+          "windup": 0.3,
+          "range": 12,
+          "manaCost": 0,
+          "notes": "Movement locked during wind-up. In P&C mode, player chases target if out of range."
+        },
+        {
+          "slot": "q",
+          "name": "Swift Shot",
+          "input": "Press Q or left-click",
+          "description": "Fires a small, fast straight projectile.",
+          "damage": null,
+          "damageScalingPerLevel": null,
+          "cooldown": 2.0,
+          "windup": null,
+          "range": 20,
+          "projectileSpeed": 15,
+          "sizeMultiplier": 1.0,
+          "manaCost": 0,
+          "notes": "Standard size and speed."
+        },
+        {
+          "slot": "w",
+          "name": "Blink Step",
+          "input": "Hold W (P&C) / Hold Shift (WASD), release to dash",
+          "description": "Dashes in the aimed direction.",
+          "dashDistance": 8,
+          "dashDistanceScalingPerLevel": 0.05,
+          "castDuration": 0.15,
+          "castLockAfter": 0.1,
+          "cooldown": 8.0,
+          "manaCost": 10,
+          "notes": "In P&C mode, dashes toward cursor clamped to max distance. Right-click cancels."
+        },
+        {
+          "slot": "e",
+          "name": "Burst Fire",
+          "input": "Hold E to charge, release to fire",
+          "description": "Fires 3 projectiles in sequence along the same direction.",
+          "projectileCount": 3,
+          "delayBetweenShots": 0.15,
+          "damage": 15,
+          "damageScalingPerLevel": 0.10,
+          "range": 20,
+          "projectileSpeed": 15,
+          "cooldown": 10.0,
+          "manaCost": 30,
+          "notes": "Can move while charging. Right-click cancels."
+        }
+      ]
+    }
+  ]
+}
