@@ -85,8 +85,9 @@ public class AutoAttacker : NetworkBehaviour
         if (_attackMoveIndicator) Destroy(_attackMoveIndicator.gameObject);
     }
 
-    private void OnDestroy()
+    public override void OnDestroy()
     {
+        base.OnDestroy();
         if (IsOwner) Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
     }
 

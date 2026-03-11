@@ -48,6 +48,11 @@ public class HomingProjectileController : NetworkBehaviour
         {
             if (!_target.IsImmuneTo(_shooterClientId))
                 _target.TakeDamage(_damage, _shooterClientId);
+
+            // Dismiss tutorial hint only for the shooter's client
+            if (_target is TrainingDummy dummy)
+                dummy.NotifyAutoAttackHit(_shooterClientId);
+
             NetworkObject.Despawn(true);
         }
     }

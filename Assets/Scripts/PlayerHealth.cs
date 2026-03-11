@@ -294,10 +294,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     private void UpdateShieldBar(float shield)
     {
         if (_shieldFillRect == null) return;
-        float hpFrac     = maxHealth > 0f ? Mathf.Clamp01(Health.Value / maxHealth) : 0f;
         float shieldFrac = maxHealth > 0f ? Mathf.Clamp01(shield / maxHealth) : 0f;
-        _shieldFillRect.anchorMin = new Vector2(hpFrac, 0f);
-        _shieldFillRect.anchorMax = new Vector2(Mathf.Min(1f, hpFrac + shieldFrac), 1f);
+        _shieldFillRect.anchorMin = new Vector2(1f - shieldFrac, 0f);
+        _shieldFillRect.anchorMax = new Vector2(1f, 1f);
     }
 
     private void UpdateBar(float current)
@@ -312,9 +311,8 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
         if (_healthText != null)
         {
-            int shield = Mathf.RoundToInt(ShieldHP.Value);
-            string shieldStr = shield > 0 ? $" (+{shield})" : "";
-            _healthText.text = $"{Mathf.RoundToInt(current)}/{Mathf.RoundToInt(maxHealth)}{shieldStr}";
+            int total = Mathf.RoundToInt(current + ShieldHP.Value);
+            _healthText.text = $"{total}/{Mathf.RoundToInt(maxHealth)}";
         }
     }
 
@@ -348,9 +346,16 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         MakeFullRect(barGO, "RedBar")
             .AddComponent<Image>().color = new Color(0.82f, 0.18f, 0.18f);
 
-        // Layer 3 — green fill (current health).
-        // Width is controlled by anchorMax.x rather than Image.Type.Filled,
-        // which requires a sprite and can silently fail when created in code.
+        // Layer 3 — grey shield (right-anchored; green draws on top where they overlap)
+        var shieldGO    = new GameObject("ShieldFill");
+        shieldGO.transform.SetParent(barGO.transform, false);
+        _shieldFillRect = shieldGO.AddComponent<RectTransform>();
+        _shieldFillRect.anchorMin = new Vector2(1f, 0f);  // starts collapsed at right edge
+        _shieldFillRect.anchorMax = new Vector2(1f, 1f);
+        _shieldFillRect.offsetMin = _shieldFillRect.offsetMax = Vector2.zero;
+        shieldGO.AddComponent<Image>().color = new Color(0.62f, 0.62f, 0.62f, 1f);
+
+        // Layer 4 — green fill (current health); drawn on top of grey so overlap looks correct
         var greenGO      = new GameObject("GreenFill");
         greenGO.transform.SetParent(barGO.transform, false);
         _greenFillRect   = greenGO.AddComponent<RectTransform>();
@@ -358,15 +363,6 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         _greenFillRect.anchorMax  = Vector2.one;   // starts full; UpdateBar shrinks it
         _greenFillRect.offsetMin  = _greenFillRect.offsetMax = Vector2.zero;
         greenGO.AddComponent<Image>().color = new Color(0.18f, 0.78f, 0.18f);
-
-        // Layer 4 — grey shield overlay (shown when ShieldHP > 0)
-        var shieldGO   = new GameObject("ShieldFill");
-        shieldGO.transform.SetParent(barGO.transform, false);
-        _shieldFillRect          = shieldGO.AddComponent<RectTransform>();
-        _shieldFillRect.anchorMin = Vector2.zero;
-        _shieldFillRect.anchorMax = Vector2.zero;  // starts collapsed; UpdateShieldBar sets it
-        _shieldFillRect.offsetMin = _shieldFillRect.offsetMax = Vector2.zero;
-        shieldGO.AddComponent<Image>().color = new Color(0.7f, 0.7f, 0.7f, 0.75f);
 
         // Layer 5 — text label sized to 100% of bar height
         var textGO  = MakeFullRect(barGO, "HealthText");

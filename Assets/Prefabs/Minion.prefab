@@ -164,7 +164,7 @@ NavMeshAgent:
   m_Height: 2
   m_BaseOffset: 1
   m_WalkableMask: 4294967295
-  m_ObstacleAvoidanceType: 0
+  m_ObstacleAvoidanceType: 2
 --- !u!114 &6467451749996073086
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -191,6 +191,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MinionHealth
   ShowTopMostFoldoutHeaderGroup: 1
+  xpGrantAmount: 2
+  xpGrantRange: 20
   Health:
     m_InternalValue: 0
   TeamIndexNet:

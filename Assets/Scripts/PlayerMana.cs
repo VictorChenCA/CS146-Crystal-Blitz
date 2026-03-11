@@ -93,7 +93,7 @@ public class PlayerMana : NetworkBehaviour
         return Mana.Value >= cost;
     }
 
-    [ServerRpc(RequireOwnership = true)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Owner)]
     public void SpendManaServerRpc(float cost)
     {
         Mana.Value = Mathf.Max(0f, Mana.Value - cost);
