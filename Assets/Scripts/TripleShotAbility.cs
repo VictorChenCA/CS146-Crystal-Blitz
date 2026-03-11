@@ -64,8 +64,8 @@ public class TripleShotAbility : NetworkBehaviour
         if (_health == null) _health = GetComponent<PlayerHealth>();
         if (_health != null && _health.IsDead) return;
 
-        bool pressed  = Keyboard.current.eKey.wasPressedThisFrame;
-        bool released = Keyboard.current.eKey.wasReleasedThisFrame;
+        bool pressed  = GameKeybinds.WasPressedThisFrame(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability3 : GameKeybinds.PnC_Ability3);
+        bool released = GameKeybinds.WasReleasedThisFrame(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability3 : GameKeybinds.PnC_Ability3);
 
         if (pressed && Time.time >= _nextFireTime && _fireCoroutine == null)
         {

@@ -76,11 +76,11 @@ public class ProjectileShooter : NetworkBehaviour
 
         if (Keyboard.current == null) return;
         bool firePressed  = GameSettings.UseWasd
-            ? Keyboard.current.spaceKey.wasPressedThisFrame
-            : Keyboard.current.qKey.wasPressedThisFrame;
+            ? GameKeybinds.WasPressedThisFrame(GameKeybinds.Wasd_Ability1)
+            : GameKeybinds.WasPressedThisFrame(GameKeybinds.PnC_Ability1);
         bool fireReleased = GameSettings.UseWasd
-            ? Keyboard.current.spaceKey.wasReleasedThisFrame
-            : Keyboard.current.qKey.wasReleasedThisFrame;
+            ? GameKeybinds.WasReleasedThisFrame(GameKeybinds.Wasd_Ability1)
+            : GameKeybinds.WasReleasedThisFrame(GameKeybinds.PnC_Ability1);
 
         if (firePressed && Time.time >= _nextFireTime && _attackCoroutine == null)
         {
@@ -226,12 +226,12 @@ public class ProjectileShooter : NetworkBehaviour
     {
         if (Keyboard.current == null) return false;
         if (GameSettings.UseWasd)
-            return Keyboard.current.wKey.wasPressedThisFrame ||
-                   Keyboard.current.sKey.wasPressedThisFrame ||
-                   Keyboard.current.aKey.wasPressedThisFrame ||
-                   Keyboard.current.dKey.wasPressedThisFrame;
-        // P&C mode: S (stop) or right-click (new move order) cancels the cast
-        return Keyboard.current.sKey.wasPressedThisFrame ||
+            return GameKeybinds.WasPressedThisFrame(GameKeybinds.Wasd_MoveForward) ||
+                   GameKeybinds.WasPressedThisFrame(GameKeybinds.Wasd_MoveBack)    ||
+                   GameKeybinds.WasPressedThisFrame(GameKeybinds.Wasd_MoveLeft)    ||
+                   GameKeybinds.WasPressedThisFrame(GameKeybinds.Wasd_MoveRight);
+        // P&C mode: Stop key or right-click (new move order) cancels the cast
+        return GameKeybinds.WasPressedThisFrame(GameKeybinds.PnC_Stop) ||
                (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame);
     }
 

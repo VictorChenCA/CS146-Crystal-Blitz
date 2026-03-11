@@ -109,8 +109,8 @@ public class ShieldAbility : NetworkBehaviour
         if (Time.time < _nextShieldTime) return;
 
         bool pressed = GameSettings.UseWasd
-            ? Keyboard.current.leftShiftKey.wasPressedThisFrame
-            : Keyboard.current.wKey.wasPressedThisFrame;
+            ? GameKeybinds.WasPressedThisFrame(GameKeybinds.Wasd_Ability2)
+            : GameKeybinds.WasPressedThisFrame(GameKeybinds.PnC_Ability2);
 
         if (!pressed) return;
         if (_mana != null && !_mana.HasMana(manaCost)) return;

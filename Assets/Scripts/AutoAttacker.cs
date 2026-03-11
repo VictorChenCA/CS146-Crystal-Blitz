@@ -46,6 +46,7 @@ public class AutoAttacker : NetworkBehaviour
 
     private Texture2D _cursorDefault;
     private Texture2D _cursorAttack;
+    private float     _lastCursorScale = 1f;
 
     // ── Attack-move indicator ─────────────────────────────────────────────────
     private LineRenderer _attackMoveIndicator;
@@ -69,11 +70,13 @@ public class AutoAttacker : NetworkBehaviour
         _renderer   = GetComponent<Renderer>();
         _mainCamera = Camera.main;
 
+        _lastCursorScale = GameSettings.CursorScale;
         BuildCursorTextures();
         CreateAttackMoveIndicator();
         Cursor.visible   = true;
         Cursor.lockState = CursorLockMode.None;
-        Cursor.SetCursor(_cursorDefault, new Vector2(8f, 8f), CursorMode.Auto);
+        float half = GetCursorSize() * 0.5f;
+        Cursor.SetCursor(_cursorDefault, new Vector2(half, half), CursorMode.Auto);
     }
 
     public override void OnNetworkDespawn()
@@ -101,6 +104,23 @@ public class AutoAttacker : NetworkBehaviour
         if (_health != null && _health.IsDead) return;
         UpdateHoverDetection();
         UpdateAttackMoveIndicator();
+        UpdateCursorScaleIfChanged();
+    }
+
+    private void UpdateCursorScaleIfChanged()
+    {
+        float desired = GameSettings.CursorScale;
+        if (Mathf.Approximately(desired, _lastCursorScale)) return;
+        _lastCursorScale = desired;
+
+        if (_cursorDefault) Destroy(_cursorDefault);
+        if (_cursorAttack)  Destroy(_cursorAttack);
+        BuildCursorTextures();
+
+        Cursor.SetCursor(
+            _attackCursorActive ? _cursorAttack : _cursorDefault,
+            new Vector2(GetCursorSize() * 0.5f, GetCursorSize() * 0.5f),
+            CursorMode.Auto);
     }
 
     // ── Hover detection ───────────────────────────────────────────────────────
@@ -160,9 +180,10 @@ public class AutoAttacker : NetworkBehaviour
         if (wantAttackCursor != _attackCursorActive)
         {
             _attackCursorActive = wantAttackCursor;
+            float half = GetCursorSize() * 0.5f;
             Cursor.SetCursor(
                 _attackCursorActive ? _cursorAttack : _cursorDefault,
-                new Vector2(8f, 8f),
+                new Vector2(half, half),
                 CursorMode.Auto);
         }
     }
@@ -398,11 +419,10 @@ public class AutoAttacker : NetworkBehaviour
 
     private bool HasWasdInput()
     {
-        if (Keyboard.current == null) return false;
-        return Keyboard.current.wKey.isPressed ||
-               Keyboard.current.sKey.isPressed ||
-               Keyboard.current.aKey.isPressed ||
-               Keyboard.current.dKey.isPressed;
+        return GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveForward) ||
+               GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveBack)    ||
+               GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveLeft)    ||
+               GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveRight);
     }
 
 
@@ -560,10 +580,13 @@ public class AutoAttacker : NetworkBehaviour
 
     // ── Cursor textures (procedural) ──────────────────────────────────────────
 
+    private int GetCursorSize() => Mathf.Clamp(Mathf.RoundToInt(16 * GameSettings.CursorScale), 8, 64);
+
     private void BuildCursorTextures()
     {
-        _cursorDefault = MakeCursorTex(16, Color.white, filled: false);
-        _cursorAttack  = MakeCursorTex(16, Color.red,   filled: true);
+        int size = GetCursorSize();
+        _cursorDefault = MakeCursorTex(size, Color.white, filled: false);
+        _cursorAttack  = MakeCursorTex(size, Color.red,   filled: true);
     }
 
     private static Texture2D MakeCursorTex(int size, Color color, bool filled)

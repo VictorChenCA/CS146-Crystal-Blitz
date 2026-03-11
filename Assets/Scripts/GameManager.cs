@@ -46,9 +46,18 @@ public class GameManager : MonoBehaviour
     private bool _useWasd = true;
 
     // ── Graphics / performance settings ──────────────────────────────────────
-    private int   _qualityIndex = 1;       // 0=Low 1=Med 2=High
-    private float _targetFps   = 60f;     // 241 = uncapped
-    private float _uiScale     = 1f;
+    private int   _qualityIndex    = 2;       // 0=Low 1=Med 2=High 3=Ultra
+    private float _targetFps       = 60f;     // 241 = uncapped
+    private float _guiScale        = 1f;
+    private float _bottomBarScale  = 1f;
+    private float _cursorScale     = 1f;
+
+    // ── Settings panel state ──────────────────────────────────────────────────
+    private int     _settingsTab      = 0;   // 0=General 1=Graphics 2=Keybinds
+    private int     _keybindTab       = 0;   // 0=WASD 1=P&C
+    private int     _prevSettingsTab  = -1;
+    private string  _rebindTarget     = null;
+    private Vector2 _settingsScrollPos;
 
     // ── Textures (created in Awake, destroyed in OnDestroy) ──────────────────
     private Texture2D _dimOverlayTex;
@@ -90,6 +99,7 @@ public class GameManager : MonoBehaviour
 
         ApplyRenderScale(_qualityIndex);
         Application.targetFrameRate = (int)_targetFps;
+        GameKeybinds.Load();
     }
 
     private void OnDestroy()
@@ -185,6 +195,31 @@ public class GameManager : MonoBehaviour
     private void OnGUI()
     {
         EnsureStyles();
+
+        // ── Rebind listening mode ─────────────────────────────────────────────
+        if (_rebindTarget != null)
+        {
+            if (Keyboard.current != null)
+            {
+                if (Keyboard.current.escapeKey.wasPressedThisFrame)
+                    _rebindTarget = null;
+                else
+                    TryCompleteRebind();
+            }
+            GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _dimOverlayTex);
+            var promptStyle = new GUIStyle(GUI.skin.box)
+            {
+                fontSize  = 28,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal    = { textColor = Color.white }
+            };
+            float pw = 400f, ph = 80f;
+            GUI.Box(new Rect((Screen.width - pw) * 0.5f, (Screen.height - ph) * 0.5f, pw, ph),
+                    "Press a key...\n(ESC to cancel)", promptStyle);
+            return;
+        }
+
         switch (_state)
         {
             case UIState.MainMenu: DrawMainMenu(); break;
@@ -452,24 +487,26 @@ public class GameManager : MonoBehaviour
         // Optional HUD: top-right corner
         if (!_showFps && !_showConnectionStatus && !_showLatency) return;
 
-        float hudX = Screen.width - 220f;
-        float hudY = 10f;
-        float lineH = 28f;
+        _hudLabelStyle.fontSize = Sz(18);
+        float hudX  = Screen.width - Sz(220f);
+        float hudY  = 10f;
+        float lineH = Sz(28f);
 
+        float hudW = Sz(210f);
         if (_showFps)
         {
-            GUI.Label(new Rect(hudX, hudY, 210f, lineH),
+            GUI.Label(new Rect(hudX, hudY, hudW, lineH),
                       $"FPS: {Mathf.RoundToInt(_fpsDisplay)}", _hudLabelStyle);
             hudY += lineH;
         }
         if (_showConnectionStatus)
         {
-            GUI.Label(new Rect(hudX, hudY, 210f, lineH), GetConnectionString(), _hudLabelStyle);
+            GUI.Label(new Rect(hudX, hudY, hudW, lineH), GetConnectionString(), _hudLabelStyle);
             hudY += lineH;
         }
         if (_showLatency)
         {
-            GUI.Label(new Rect(hudX, hudY, 210f, lineH),
+            GUI.Label(new Rect(hudX, hudY, hudW, lineH),
                       $"RTT: {GetLatencyString()}", _hudLabelStyle);
         }
     }
@@ -478,139 +515,238 @@ public class GameManager : MonoBehaviour
     // Draw: Settings Panel
     // ─────────────────────────────────────────────────────────────────────────
 
+    // ── Sz helper — scales a pixel value by _guiScale ─────────────────────────
+    private int Sz(float px) => Mathf.RoundToInt(px * _guiScale);
+
+    // ── Binding action descriptors ────────────────────────────────────────────
+    private static readonly (string label, string field)[] WasdBindings =
+    {
+        ("Move Forward",            "Wasd_MoveForward"),
+        ("Move Backward",           "Wasd_MoveBack"),
+        ("Move Left",               "Wasd_MoveLeft"),
+        ("Move Right",              "Wasd_MoveRight"),
+        ("Ability 1  (Shoot)",      "Wasd_Ability1"),
+        ("Ability 2  (Dash/Shield)","Wasd_Ability2"),
+        ("Ability 3  (Triple/Fan)", "Wasd_Ability3"),
+    };
+
+    private static readonly (string label, string field)[] PnCBindings =
+    {
+        ("Stop / Cancel",           "PnC_Stop"),
+        ("Ability 1  (Shoot)",      "PnC_Ability1"),
+        ("Ability 2  (Dash/Shield)","PnC_Ability2"),
+        ("Ability 3  (Triple/Fan)", "PnC_Ability3"),
+        ("Attack Move",             "PnC_ForceAA"),
+    };
+
+    private static Key GetBoundKey(string field) => field switch
+    {
+        "Wasd_MoveForward" => GameKeybinds.Wasd_MoveForward,
+        "Wasd_MoveBack"    => GameKeybinds.Wasd_MoveBack,
+        "Wasd_MoveLeft"    => GameKeybinds.Wasd_MoveLeft,
+        "Wasd_MoveRight"   => GameKeybinds.Wasd_MoveRight,
+        "Wasd_Ability1"    => GameKeybinds.Wasd_Ability1,
+        "Wasd_Ability2"    => GameKeybinds.Wasd_Ability2,
+        "Wasd_Ability3"    => GameKeybinds.Wasd_Ability3,
+        "PnC_Stop"         => GameKeybinds.PnC_Stop,
+        "PnC_Ability1"     => GameKeybinds.PnC_Ability1,
+        "PnC_Ability2"     => GameKeybinds.PnC_Ability2,
+        "PnC_Ability3"     => GameKeybinds.PnC_Ability3,
+        "PnC_ForceAA"      => GameKeybinds.PnC_ForceAA,
+        _                  => Key.None
+    };
+
+    private static void SetBoundKey(string field, Key key)
+    {
+        switch (field)
+        {
+            case "Wasd_MoveForward": GameKeybinds.Wasd_MoveForward = key; break;
+            case "Wasd_MoveBack":    GameKeybinds.Wasd_MoveBack    = key; break;
+            case "Wasd_MoveLeft":    GameKeybinds.Wasd_MoveLeft    = key; break;
+            case "Wasd_MoveRight":   GameKeybinds.Wasd_MoveRight   = key; break;
+            case "Wasd_Ability1":    GameKeybinds.Wasd_Ability1    = key; break;
+            case "Wasd_Ability2":    GameKeybinds.Wasd_Ability2    = key; break;
+            case "Wasd_Ability3":    GameKeybinds.Wasd_Ability3    = key; break;
+            case "PnC_Stop":         GameKeybinds.PnC_Stop         = key; break;
+            case "PnC_Ability1":     GameKeybinds.PnC_Ability1     = key; break;
+            case "PnC_Ability2":     GameKeybinds.PnC_Ability2     = key; break;
+            case "PnC_Ability3":     GameKeybinds.PnC_Ability3     = key; break;
+            case "PnC_ForceAA":      GameKeybinds.PnC_ForceAA      = key; break;
+        }
+        GameKeybinds.Save();
+    }
+
+    private static readonly Key[] BindableKeys =
+    {
+        Key.A, Key.B,
+        Key.C, Key.D,
+        Key.E, Key.F,
+        Key.G, Key.H,
+        Key.I, Key.J,
+        Key.K, Key.L,
+        Key.M, Key.N,
+        Key.O, Key.P,
+        Key.Q, Key.R,
+        Key.S, Key.T,
+        Key.U, Key.V,
+        Key.W, Key.X,
+        Key.Y, Key.Z,
+        Key.Space,
+        Key.LeftShift,  Key.RightShift,
+        Key.LeftCtrl,   Key.RightCtrl,
+        Key.LeftAlt,    Key.RightAlt,
+        Key.Tab,        Key.CapsLock,
+        Key.Backspace,
+        Key.UpArrow,    Key.DownArrow,
+        Key.LeftArrow,  Key.RightArrow,
+        Key.F1,         Key.F2,
+        Key.F3,         Key.F4,
+        Key.F5,         Key.F6,
+        Key.Digit1,     Key.Digit2,
+        Key.Digit3,     Key.Digit4,
+        Key.Digit5,     Key.Digit6,
+        Key.Digit7,     Key.Digit8,
+        Key.Digit9,     Key.Digit0,
+        Key.Numpad0,    Key.Numpad1,
+        Key.Numpad2,    Key.Numpad3,
+        Key.Numpad4,    Key.Numpad5,
+        Key.Numpad6,    Key.Numpad7,
+        Key.Numpad8,    Key.Numpad9,
+    };
+
+    private void TryCompleteRebind()
+    {
+        if (Keyboard.current == null || _rebindTarget == null) return;
+        foreach (var key in BindableKeys)
+        {
+            if (Keyboard.current[key].wasPressedThisFrame)
+            {
+                SetBoundKey(_rebindTarget, key);
+                _rebindTarget = null;
+                return;
+            }
+        }
+    }
+
     private void DrawSettingsPanel()
     {
         float sw = Screen.width;
         float sh = Screen.height;
 
+        // Reset mutable styles to base sizes so close button isn't affected by tab mutations
+        _buttonStyle.fontSize = Sz(20);
+
         // Dim overlay
         GUI.DrawTexture(new Rect(0, 0, sw, sh), _dimOverlayTex);
 
         // Panel
-        float panelW = sw * 0.5f;
-        float panelH = sh * 0.72f;
-        Rect panelR = new Rect((sw - panelW) * 0.5f, (sh - panelH) * 0.5f, panelW, panelH);
+        float panelW = Mathf.Min(sw * 0.58f, 720f);
+        float panelH = sh * 0.82f;
+        Rect  panelR = new Rect((sw - panelW) * 0.5f, (sh - panelH) * 0.5f, panelW, panelH);
         GUI.DrawTexture(panelR, _whitePanelTex);
 
-        // Inner area with padding
-        float pad = 24f;
-        Rect innerR = new Rect(panelR.x + pad, panelR.y + pad,
-                                panelR.width - pad * 2f, panelR.height - pad * 2f);
+        float pad = Sz(22f);
+        Rect  innerR = new Rect(panelR.x + pad, panelR.y + pad,
+                                 panelR.width - pad * 2f, panelR.height - pad * 2f);
         GUILayout.BeginArea(innerR);
 
+        // Title
+        _panelTitleStyle.fontSize = Sz(34);
         GUILayout.Label("Settings", _panelTitleStyle);
-        GUILayout.Space(10f);
+        GUILayout.Space(Sz(6f));
 
-        // ── Controller type ───────────────────────────────────────────────
+        // Tab bar
+        float tabH = Sz(38f);
+        _segActiveStyle.fontSize   = Sz(17);
+        _segInactiveStyle.fontSize = Sz(17);
+        GUILayout.BeginHorizontal();
+        string[] tabNames = { "General", "Graphics", "Keybinds" };
+        for (int i = 0; i < 3; i++)
+        {
+            if (GUILayout.Button(tabNames[i],
+                    i == _settingsTab ? _segActiveStyle : _segInactiveStyle,
+                    GUILayout.Height(tabH)))
+            {
+                if (_settingsTab != i)
+                {
+                    _settingsTab = i;
+                    _settingsScrollPos = Vector2.zero;
+                }
+            }
+        }
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(Sz(6f));
+
+        // Scroll view — explicit height so title + tab bar are never displaced
+        float titleH   = Sz(34f + 6f);   // label + space below
+        float tabRowH  = tabH + Sz(6f);  // tab buttons + space below
+        float scrollH  = innerR.height - titleH - tabRowH;
+        _settingsScrollPos = GUILayout.BeginScrollView(_settingsScrollPos,
+                                                        GUILayout.Height(scrollH));
+        switch (_settingsTab)
+        {
+            case 0: DrawGeneralTab();   break;
+            case 1: DrawGraphicsTab();  break;
+            case 2: DrawKeybindsTab();  break;
+        }
+        GUILayout.EndScrollView();
+
+        GUILayout.EndArea();
+
+        // Close button — top-right of panel
+        bool   fromInGame  = _settingsPreviousState == UIState.InGame;
+        string closeLabel  = fromInGame ? "✕" : "←";
+        float  cbSize      = Sz(48f);
+        if (GUI.Button(new Rect(panelR.xMax - cbSize - 8f, panelR.y + 8f, cbSize, cbSize),
+                       closeLabel, _buttonStyle))
+            _state = _settingsPreviousState;
+    }
+
+    private void DrawGeneralTab()
+    {
+        float segW = 440f * _guiScale;
+        float segH = Sz(44f);
+        _panelLabelStyle.fontSize  = Sz(18);
+        _segActiveStyle.fontSize   = Sz(20);
+        _segInactiveStyle.fontSize = Sz(20);
+        _toggleStyle.fontSize      = Sz(18);
+
+        // ── Controller ────────────────────────────────────────────────────
         GUILayout.Label("Controller", _panelLabelStyle);
-        GUILayout.Space(4f);
-        float segW = 460f, segH = 44f;
+        GUILayout.Space(Sz(4f));
         GUILayout.BeginHorizontal();
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("WASD", _useWasd ? _segActiveStyle : _segInactiveStyle,
                              GUILayout.Width(segW * 0.5f), GUILayout.Height(segH)))
-        {
-            _useWasd = true;
-            GameSettings.UseWasd = true;
-        }
+        { _useWasd = true;  GameSettings.UseWasd = true;  _keybindTab = 0; }
         if (GUILayout.Button("Point & Click", !_useWasd ? _segActiveStyle : _segInactiveStyle,
                              GUILayout.Width(segW * 0.5f), GUILayout.Height(segH)))
-        {
-            _useWasd = false;
-            GameSettings.UseWasd = false;
-        }
+        { _useWasd = false; GameSettings.UseWasd = false; _keybindTab = 1; }
         GUILayout.FlexibleSpace();
         GUILayout.EndHorizontal();
 
-        GUILayout.Space(12f);
+        GUILayout.Space(Sz(14f));
 
-        // ── Graphics quality ──────────────────────────────────────────────
-        GUILayout.Label("Graphics Quality", _panelLabelStyle);
-        GUILayout.Space(4f);
-        string[] qualityLabels = { "Low", "Medium", "High" };
-        GUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-        for (int i = 0; i < 3; i++)
-        {
-            if (GUILayout.Button(qualityLabels[i],
-                                 i == _qualityIndex ? _segActiveStyle : _segInactiveStyle,
-                                 GUILayout.Width(segW / 3f), GUILayout.Height(segH)))
-            {
-                _qualityIndex = i;
-                ApplyRenderScale(_qualityIndex);
-            }
-        }
-        GUILayout.FlexibleSpace();
-        GUILayout.EndHorizontal();
-
-        GUILayout.Space(12f);
-
-        // ── FPS cap ───────────────────────────────────────────────────────
-        GUILayout.Label("Frame Rate Cap", _panelLabelStyle);
-        GUILayout.Space(4f);
-        bool isUncapped = _targetFps >= 241f;
-        GUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-        GUILayout.Label(isUncapped ? "Uncapped" : $"{Mathf.RoundToInt(_targetFps)} FPS",
-                        _panelLabelStyle, GUILayout.Width(110f));
-        float newFps = GUILayout.HorizontalSlider(_targetFps, 30f, 241f,
-                                                   GUILayout.Width(segW - 120f));
-        newFps = Mathf.Round(newFps);
-        if (!Mathf.Approximately(newFps, _targetFps))
-        {
-            _targetFps = newFps;
-            Application.targetFrameRate = _targetFps >= 241f ? -1 : (int)_targetFps;
-        }
-        GUILayout.FlexibleSpace();
-        GUILayout.EndHorizontal();
-
-        GUILayout.Space(12f);
-
-        // ── UI Scale ──────────────────────────────────────────────────────
-        GUILayout.Label("UI Scale", _panelLabelStyle);
-        GUILayout.Space(4f);
-        GUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-        GUILayout.Label($"{_uiScale:0.0}×", _panelLabelStyle, GUILayout.Width(60f));
-        float newScale = GUILayout.HorizontalSlider(_uiScale, 0.5f, 2f,
-                                                    GUILayout.Width(segW - 70f));
-        newScale = Mathf.Round(newScale * 10f) / 10f;
-        if (!Mathf.Approximately(newScale, _uiScale))
-            _uiScale = newScale;
-        GUILayout.FlexibleSpace();
-        GUILayout.EndHorizontal();
-
-        GUILayout.Space(12f);
-
-        // ── HUD toggles ───────────────────────────────────────────────────
+        // ── HUD Overlays — single aligned row ────────────────────────────
         GUILayout.Label("HUD Overlays", _panelLabelStyle);
-        GUILayout.Space(4f);
+        GUILayout.Space(Sz(4f));
+        float overlayW = Sz(180f);
         GUILayout.BeginHorizontal();
         GUILayout.FlexibleSpace();
-        _showFps = GUILayout.Toggle(_showFps, "Show FPS", _toggleStyle);
+        _showFps              = GUILayout.Toggle(_showFps,              "Show FPS",         _toggleStyle, GUILayout.Width(overlayW));
+        _showConnectionStatus = GUILayout.Toggle(_showConnectionStatus, "Show Connection",   _toggleStyle, GUILayout.Width(overlayW));
+        _showLatency          = GUILayout.Toggle(_showLatency,          "Show Latency",      _toggleStyle, GUILayout.Width(overlayW));
         GUILayout.FlexibleSpace();
         GUILayout.EndHorizontal();
-
-        GUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-        _showConnectionStatus = GUILayout.Toggle(_showConnectionStatus, "Show Connection Status", _toggleStyle);
-        GUILayout.FlexibleSpace();
-        GUILayout.EndHorizontal();
-
-        GUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-        _showLatency = GUILayout.Toggle(_showLatency, "Show Latency", _toggleStyle);
-        GUILayout.FlexibleSpace();
-        GUILayout.EndHorizontal();
-
-        GUILayout.FlexibleSpace();
 
         // ── Relay join code (host only) ───────────────────────────────────
         if (_useRelay && !string.IsNullOrEmpty(_joinCode) &&
             NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
         {
+            GUILayout.Space(Sz(14f));
             GUILayout.Label("Join Code", _panelLabelStyle);
-            GUILayout.Space(4f);
+            GUILayout.Space(Sz(4f));
             bool copied = Time.unscaledTime < _copiedUntil;
             GUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
@@ -621,32 +757,266 @@ public class GameManager : MonoBehaviour
             }
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
-            GUILayout.Space(12f);
         }
 
+        GUILayout.Space(Sz(18f));
+
+        // ── Reset All Settings ────────────────────────────────────────────
+        _buttonStyle.fontSize = Sz(18);
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("Reset All Settings to Defaults", _buttonStyle,
+                             GUILayout.Width(Sz(300f)), GUILayout.Height(Sz(44f))))
+        {
+            _guiScale     = 1f;
+            _bottomBarScale = 1f;
+            _cursorScale  = 1f;
+            _qualityIndex = 2;
+            _targetFps    = 60f;
+            _showFps      = false;
+            _showConnectionStatus = false;
+            _showLatency  = false;
+            GameSettings.BottomBarScale = 1f;
+            GameSettings.CursorScale    = 1f;
+            Application.targetFrameRate = 60;
+            ApplyRenderScale(_qualityIndex);
+            GameKeybinds.ResetToDefaults();
+            GameKeybinds.Save();
+        }
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(Sz(8f));
+
+        // ── Disconnect / Return ───────────────────────────────────────────
         var nm = NetworkManager.Singleton;
         if (nm != null && (nm.IsClient || nm.IsServer))
         {
-            if (GUILayout.Button("Disconnect & Return to Main Menu", _buttonStyle))
+            GUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Disconnect", _buttonStyle,
+                                 GUILayout.Width(Sz(280f)), GUILayout.Height(Sz(44f))))
             {
                 nm.Shutdown();
-                _relayBusy = false;
-                _joinCode = "";
+                _relayBusy  = false;
+                _joinCode   = "";
                 _relayError = "";
-                _state = UIState.MainMenu;
+                _state      = UIState.MainMenu;
             }
-            GUILayout.Space(8f);
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+        }
+        else if (_settingsPreviousState == UIState.MainMenu)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Return to Menu", _buttonStyle,
+                                 GUILayout.Width(Sz(280f)), GUILayout.Height(Sz(44f))))
+                _state = UIState.MainMenu;
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
         }
 
-        GUILayout.EndArea();
+        GUILayout.Space(Sz(8f));
+    }
 
-        // ── Close button — top-right of panel ─────────────────────────────
-        bool fromInGame = _settingsPreviousState == UIState.InGame;
-        string closeLabel = fromInGame ? "✕" : "←";
-        float  cbSize = 48f;
-        if (GUI.Button(new Rect(panelR.xMax - cbSize - 8f, panelR.y + 8f, cbSize, cbSize),
-                       closeLabel, _buttonStyle))
-            _state = _settingsPreviousState;
+    private void DrawGraphicsTab()
+    {
+        float segW = 460f * _guiScale;
+        float segH = Sz(44f);
+        _panelLabelStyle.fontSize  = Sz(18);
+        _segActiveStyle.fontSize   = Sz(20);
+        _segInactiveStyle.fontSize = Sz(20);
+
+        GUILayout.Label("Graphics Quality", _panelLabelStyle);
+        GUILayout.Space(Sz(4f));
+        string[] qualityLabels = { "Low", "Medium", "High", "Ultra" };
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        for (int i = 0; i < 4; i++)
+        {
+            if (GUILayout.Button(qualityLabels[i],
+                                 i == _qualityIndex ? _segActiveStyle : _segInactiveStyle,
+                                 GUILayout.Width(segW / 4f), GUILayout.Height(segH)))
+            {
+                _qualityIndex = i;
+                ApplyRenderScale(_qualityIndex);
+            }
+        }
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(Sz(6f));
+        _panelLabelStyle.fontStyle = FontStyle.Normal;
+        _panelLabelStyle.fontSize  = Sz(15);
+        GUILayout.Label($"Render Scale: {RenderScales[_qualityIndex]:0.00}×", _panelLabelStyle);
+        _panelLabelStyle.fontStyle = FontStyle.Bold;
+        _panelLabelStyle.fontSize  = Sz(18);
+
+        GUILayout.Space(Sz(14f));
+
+        // ── Frame Rate Cap ────────────────────────────────────────────────
+        GUILayout.Label("Frame Rate Cap", _panelLabelStyle);
+        GUILayout.Space(Sz(4f));
+        bool isUncapped = _targetFps >= 241f;
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        GUILayout.Label(isUncapped ? "Uncapped" : $"{Mathf.RoundToInt(_targetFps)} FPS",
+                        _panelLabelStyle, GUILayout.Width(Sz(110f)));
+        float newFps = GUILayout.HorizontalSlider(_targetFps, 30f, 241f,
+                                                   GUILayout.Width(segW - Sz(120f)),
+                                                   GUILayout.Height(Sz(32f)));
+        newFps = Mathf.Round(newFps);
+        if (!Mathf.Approximately(newFps, _targetFps))
+        {
+            _targetFps = newFps;
+            Application.targetFrameRate = _targetFps >= 241f ? -1 : (int)_targetFps;
+        }
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(Sz(14f));
+
+        // ── UI Scale (master) ─────────────────────────────────────────────
+        GUILayout.Label("UI Scale", _panelLabelStyle);
+        GUILayout.Space(Sz(4f));
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        GUILayout.Label($"{_guiScale:0.0}×", _panelLabelStyle, GUILayout.Width(Sz(60f)));
+        float newScale = GUILayout.HorizontalSlider(_guiScale, 0.5f, 2f,
+                                                    GUILayout.Width(segW - Sz(70f)),
+                                                    GUILayout.Height(Sz(32f)));
+        newScale = Mathf.Round(newScale * 10f) / 10f;
+        if (!Mathf.Approximately(newScale, _guiScale))
+            _guiScale = newScale;
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(Sz(14f));
+
+        // ── Cursor Scale ──────────────────────────────────────────────────
+        GUILayout.Label("Cursor Scale", _panelLabelStyle);
+        GUILayout.Space(Sz(4f));
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        GUILayout.Label($"{_cursorScale:0.0}×", _panelLabelStyle, GUILayout.Width(Sz(60f)));
+        float newCursor = GUILayout.HorizontalSlider(_cursorScale, 0.5f, 2f,
+                                                      GUILayout.Width(segW - Sz(70f)),
+                                                      GUILayout.Height(Sz(32f)));
+        newCursor = Mathf.Round(newCursor * 10f) / 10f;
+        if (!Mathf.Approximately(newCursor, _cursorScale))
+        {
+            _cursorScale = newCursor;
+            GameSettings.CursorScale = _cursorScale;
+        }
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(Sz(14f));
+
+        // ── Bottom Bar Scale ──────────────────────────────────────────────
+        GUILayout.Label("Bottom Bar Scale", _panelLabelStyle);
+        GUILayout.Space(Sz(4f));
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        GUILayout.Label($"{_bottomBarScale:0.0}×", _panelLabelStyle, GUILayout.Width(Sz(60f)));
+        float newBar = GUILayout.HorizontalSlider(_bottomBarScale, 0.5f, 2f,
+                                                   GUILayout.Width(segW - Sz(70f)),
+                                                   GUILayout.Height(Sz(32f)));
+        newBar = Mathf.Round(newBar * 10f) / 10f;
+        if (!Mathf.Approximately(newBar, _bottomBarScale))
+        {
+            _bottomBarScale = newBar;
+            GameSettings.BottomBarScale = _bottomBarScale;
+        }
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(Sz(8f));
+    }
+
+    private void DrawKeybindsTab()
+    {
+        float segH   = Sz(38f);
+        float labelW = Sz(230f);
+        float btnW   = Sz(120f);
+        _panelLabelStyle.fontSize  = Sz(17);
+        _panelTitleStyle.fontSize  = Sz(20);
+        _segActiveStyle.fontSize   = Sz(16);
+        _segInactiveStyle.fontSize = Sz(16);
+        _buttonStyle.fontSize      = Sz(17);
+
+        // Sub-tab row
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("WASD Mode",
+                _keybindTab == 0 ? _segActiveStyle : _segInactiveStyle,
+                GUILayout.Width(Sz(160f)), GUILayout.Height(segH)))
+        { _keybindTab = 0; _useWasd = true;  GameSettings.UseWasd = true; }
+        if (GUILayout.Button("Point & Click",
+                _keybindTab == 1 ? _segActiveStyle : _segInactiveStyle,
+                GUILayout.Width(Sz(160f)), GUILayout.Height(segH)))
+        { _keybindTab = 1; _useWasd = false; GameSettings.UseWasd = false; }
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(Sz(10f));
+
+        // Schema header
+        GUILayout.Label(_keybindTab == 0 ? "WASD Mode Keybinds" : "Point & Click Keybinds",
+                        _panelTitleStyle);
+        GUILayout.Space(Sz(8f));
+
+        // Binding rows
+        var bindings = _keybindTab == 0 ? WasdBindings : PnCBindings;
+        var prevAlign = _panelLabelStyle.alignment;
+        foreach (var (label, field) in bindings)
+        {
+            Key  currentKey  = GetBoundKey(field);
+            bool isRebinding = _rebindTarget == field;
+
+            GUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            _panelLabelStyle.alignment = TextAnchor.MiddleLeft;
+            GUILayout.Label(label, _panelLabelStyle, GUILayout.Width(labelW), GUILayout.Height(segH));
+            _panelLabelStyle.alignment = prevAlign;
+
+            GUIStyle btnStyle = isRebinding ? _segActiveStyle : _segInactiveStyle;
+            string btnLabel   = isRebinding ? "Press a key..." : GameKeybinds.KeyName(currentKey);
+            if (GUILayout.Button(btnLabel, btnStyle, GUILayout.Width(btnW), GUILayout.Height(segH)))
+                _rebindTarget = field;
+
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+            GUILayout.Space(Sz(3f));
+        }
+
+        GUILayout.Space(Sz(10f));
+
+        // Info label
+        var savedFontSize = _panelLabelStyle.fontSize;
+        var savedColor    = _panelLabelStyle.normal.textColor;
+        _panelLabelStyle.fontSize            = Sz(14);
+        _panelLabelStyle.normal.textColor    = new Color(0.5f, 0.5f, 0.5f);
+        GUILayout.Label("Left Click / Right Click — not rebindable", _panelLabelStyle);
+        _panelLabelStyle.fontSize            = savedFontSize;
+        _panelLabelStyle.normal.textColor    = savedColor;
+
+        GUILayout.Space(Sz(12f));
+
+        // Reset keybinds button
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("Reset Keybinds to Defaults", _buttonStyle,
+                             GUILayout.Width(Sz(280f)), GUILayout.Height(Sz(44f))))
+        {
+            GameKeybinds.ResetToDefaults();
+            GameKeybinds.Save();
+        }
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(Sz(8f));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -668,7 +1038,7 @@ public class GameManager : MonoBehaviour
         var xp          = localObj.GetComponent<PlayerXP>();
 
         // ── Layout constants (scaled) ─────────────────────────────────────
-        float s            = _uiScale;
+        float s            = _guiScale * GameSettings.BottomBarScale;
         float padBottom    = 20f  * s;
         float circleD      = 90f  * s;
         float xpThickness  = 7f   * s;
@@ -739,7 +1109,7 @@ public class GameManager : MonoBehaviour
         }
 
         // Keybind label — bottom-left quarter of ability 1 icon
-        string keybind1 = GameSettings.UseWasd ? "Space" : "Q";
+        string keybind1 = GameKeybinds.KeyName(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability1 : GameKeybinds.PnC_Ability1);
         _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
         _levelStyle.alignment = TextAnchor.LowerLeft;
         GUI.Label(new Rect(abX + 3f * s, colTop, abilitySize - 3f * s, abilitySize - 3f * s),
@@ -763,7 +1133,7 @@ public class GameManager : MonoBehaviour
                       dashCDR.ToString("0.0"), _levelStyle);
         }
 
-        string keybind2 = GameSettings.UseWasd ? "Shift" : "W";
+        string keybind2 = GameKeybinds.KeyName(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability2 : GameKeybinds.PnC_Ability2);
         _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
         _levelStyle.alignment = TextAnchor.LowerLeft;
         GUI.Label(new Rect(ab2X + 3f * s, colTop, abilitySize - 3f * s, abilitySize - 3f * s),
@@ -786,10 +1156,11 @@ public class GameManager : MonoBehaviour
         }
 
         // Keybind label for ability 3
+        string keybind3 = GameKeybinds.KeyName(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability3 : GameKeybinds.PnC_Ability3);
         _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
         _levelStyle.alignment = TextAnchor.LowerLeft;
         GUI.Label(new Rect(ab3X + 3f * s, colTop, abilitySize - 3f * s, abilitySize - 3f * s),
-                  "E", _levelStyle);
+                  keybind3, _levelStyle);
         _levelStyle.alignment = TextAnchor.UpperCenter;
 
         // ── Mana cost labels on ability icons (top-right corner) ─────────
@@ -949,7 +1320,8 @@ public class GameManager : MonoBehaviour
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
-    private static readonly float[] RenderScales = { 0.5f, 0.75f, 1.0f };
+    private static readonly float[] RenderScales = { 0.5f, 0.75f, 1.0f, 1.25f };
+    // Labels: Low | Medium | High | Ultra
 
     private static void ApplyRenderScale(int qualityIndex)
     {
@@ -1056,9 +1428,9 @@ public class GameManager : MonoBehaviour
 
         _hudLabelStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 18,
+            fontSize  = 18,
             alignment = TextAnchor.MiddleRight,
-            normal = { textColor = Color.white }
+            normal    = { textColor = new Color(0.65f, 0.65f, 0.65f) }
         };
 
         _toggleStyle = new GUIStyle(GUI.skin.toggle)

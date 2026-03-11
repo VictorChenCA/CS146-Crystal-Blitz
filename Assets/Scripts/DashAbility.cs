@@ -66,11 +66,11 @@ public class DashAbility : NetworkBehaviour
         }
 
         bool pressed  = GameSettings.UseWasd
-            ? Keyboard.current.leftShiftKey.wasPressedThisFrame
-            : Keyboard.current.wKey.wasPressedThisFrame;
+            ? GameKeybinds.WasPressedThisFrame(GameKeybinds.Wasd_Ability2)
+            : GameKeybinds.WasPressedThisFrame(GameKeybinds.PnC_Ability2);
         bool released = GameSettings.UseWasd
-            ? Keyboard.current.leftShiftKey.wasReleasedThisFrame
-            : Keyboard.current.wKey.wasReleasedThisFrame;
+            ? GameKeybinds.WasReleasedThisFrame(GameKeybinds.Wasd_Ability2)
+            : GameKeybinds.WasReleasedThisFrame(GameKeybinds.PnC_Ability2);
 
         if (pressed && Time.time >= _nextDashTime)
         {
@@ -166,10 +166,10 @@ public class DashAbility : NetworkBehaviour
         {
             float fwd   = 0f;
             float right = 0f;
-            if (Keyboard.current.wKey.isPressed) fwd   += 1f;
-            if (Keyboard.current.sKey.isPressed) fwd   -= 1f;
-            if (Keyboard.current.dKey.isPressed) right += 1f;
-            if (Keyboard.current.aKey.isPressed) right -= 1f;
+            if (GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveForward)) fwd   += 1f;
+            if (GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveBack))    fwd   -= 1f;
+            if (GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveRight))   right += 1f;
+            if (GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveLeft))    right -= 1f;
 
             if (fwd == 0f && right == 0f)
                 return _pc != null ? _pc.LastMoveDirection : MoveForward;

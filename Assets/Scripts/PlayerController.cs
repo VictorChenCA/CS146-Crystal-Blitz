@@ -126,7 +126,7 @@ public class PlayerController : NetworkBehaviour
             if (isLobby)
             {
                 Vector2 rand = Random.insideUnitCircle * 3f;
-                spawnPos = new Vector3(rand.x, groundY, 100f + rand.y);
+                spawnPos = new Vector3(rand.x, groundY, 92f + rand.y);
             }
             else
             {
@@ -303,10 +303,10 @@ public class PlayerController : NetworkBehaviour
         float fwdInput   = 0f;
         float rightInput = 0f;
 
-        if (Keyboard.current.wKey.isPressed) fwdInput   += 1f;
-        if (Keyboard.current.sKey.isPressed) fwdInput   -= 1f;
-        if (Keyboard.current.dKey.isPressed) rightInput += 1f;
-        if (Keyboard.current.aKey.isPressed) rightInput -= 1f;
+        if (GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveForward)) fwdInput   += 1f;
+        if (GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveBack))    fwdInput   -= 1f;
+        if (GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveRight))   rightInput += 1f;
+        if (GameKeybinds.IsPressed(GameKeybinds.Wasd_MoveLeft))    rightInput -= 1f;
 
         if (fwdInput == 0f && rightInput == 0f) return;
 
@@ -332,7 +332,7 @@ public class PlayerController : NetworkBehaviour
     private void SyncNavMovement()
     {
         // S = full stop in P&C mode
-        if (Keyboard.current != null && Keyboard.current.sKey.wasPressedThisFrame)
+        if (Keyboard.current != null && GameKeybinds.WasPressedThisFrame(GameKeybinds.PnC_Stop))
         {
             StopNavMovement();
             _autoAttacker?.CancelAutoAttack();

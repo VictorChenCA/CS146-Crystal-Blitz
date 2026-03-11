@@ -51,7 +51,7 @@ public class GamePhaseManager : NetworkBehaviour
 
     // ── Lobby spawn ───────────────────────────────────────────────────────────
 
-    private static readonly Vector3 LobbySpawnCenter = new Vector3(0f, 1f, 100f);
+    private static readonly Vector3 LobbySpawnCenter = new Vector3(0f, 1f, 92f);
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
