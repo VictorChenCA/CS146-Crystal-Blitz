@@ -51,7 +51,7 @@ public class MinionController : NetworkBehaviour
             _agent.autoBraking           = false;
             _agent.updateRotation        = false;
             _agent.stoppingDistance      = settings.navStoppingDistance;
-            _agent.obstacleAvoidanceType = UnityEngine.AI.ObstacleAvoidanceType.NoObstacleAvoidance;
+            _agent.obstacleAvoidanceType = UnityEngine.AI.ObstacleAvoidanceType.GoodQualityObstacleAvoidance;
             Debug.Log($"[Minion T{teamIndex}] Agent found. isOnNavMesh={_agent.isOnNavMesh} speed={_agent.speed}");
         }
         else
