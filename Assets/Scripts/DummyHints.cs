@@ -20,6 +20,10 @@ public class DummyHints : NetworkBehaviour
     private bool        _hintHidden;
     private Camera      _cam;
 
+    // Tutorial display — driven by TutorialManager
+    private Transform   _tutorialRoot;
+    private TextMeshPro _tutorialText;
+
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
     private void Awake()
@@ -34,6 +38,37 @@ public class DummyHints : NetworkBehaviour
         _hintText.alignment = TextAlignmentOptions.Center;
         _hintText.color     = Color.white;
         _hintText.rectTransform.sizeDelta = new Vector2(rectWidth, 1f);
+
+        // ── Tutorial display group (hidden until TutorialManager activates it) ──
+        var tutRoot = new GameObject("TutorialHintRoot");
+        tutRoot.transform.SetParent(transform);
+        tutRoot.transform.localPosition = new Vector3(0f, hintHeight + 1.4f, 0f);
+        _tutorialRoot = tutRoot.transform;
+
+        // Dark background quad (rendered at local Z=0, faces camera via billboard)
+        var bgGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        Destroy(bgGo.GetComponent<Collider>());
+        bgGo.transform.SetParent(_tutorialRoot);
+        bgGo.transform.localPosition = Vector3.zero;
+        bgGo.transform.localRotation = Quaternion.identity;
+        bgGo.transform.localScale    = new Vector3(rectWidth + 1.2f, 3.2f, 1f);
+        var bgMat = new Material(Shader.Find("Sprites/Default"));
+        bgMat.color = new Color(0f, 0f, 0f, 0.72f);
+        bgGo.GetComponent<Renderer>().material = bgMat;
+
+        // Tutorial text (local Z = -0.02 → slightly in front of the bg quad)
+        var tutTextGo = new GameObject("TutorialHintText");
+        tutTextGo.transform.SetParent(_tutorialRoot);
+        tutTextGo.transform.localPosition = new Vector3(0f, 0f, -0.02f);
+        tutTextGo.transform.localRotation = Quaternion.identity;
+
+        _tutorialText           = tutTextGo.AddComponent<TextMeshPro>();
+        _tutorialText.fontSize  = fontSize;
+        _tutorialText.alignment = TextAlignmentOptions.Center;
+        _tutorialText.color     = Color.white;
+        _tutorialText.rectTransform.sizeDelta = new Vector2(rectWidth, 2.8f);
+
+        tutRoot.SetActive(false);
     }
 
     public override void OnNetworkSpawn()
@@ -42,6 +77,21 @@ public class DummyHints : NetworkBehaviour
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
+
+    /// <summary>Called by TutorialManager to show a message above the dummy.</summary>
+    public void ShowTutorialMessage(string msg)
+    {
+        if (_tutorialText == null) return;
+        _tutorialText.text = msg;
+        _tutorialRoot.gameObject.SetActive(true);
+    }
+
+    /// <summary>Called by TutorialManager to hide the tutorial display.</summary>
+    public void HideTutorialMessage()
+    {
+        if (_tutorialRoot != null)
+            _tutorialRoot.gameObject.SetActive(false);
+    }
 
     /// <summary>Called by TrainingDummy (server-side) when an auto-attack hits.</summary>
     public void NotifyAutoAttackHit(ulong shooterClientId)
@@ -59,7 +109,10 @@ public class DummyHints : NetworkBehaviour
     private void HideHintClientRpc(ClientRpcParams clientRpcParams = default)
     {
         if (!_hintHidden)
+        {
+            TutorialManager.OnAutoAttackHit?.Invoke();
             StartCoroutine(FadeOutHint());
+        }
     }
 
     // ── Coroutines ───────────────────────────────────────────────────────────
@@ -107,11 +160,19 @@ public class DummyHints : NetworkBehaviour
     private void LateUpdate()
     {
         if (_cam == null) _cam = Camera.main;
+        if (_cam == null) return;
 
-        if (_hintText != null && !_hintHidden && _cam != null)
+        if (_hintText != null && !_hintHidden)
         {
             _hintText.transform.rotation = Quaternion.LookRotation(
                 _hintText.transform.position - _cam.transform.position
+            );
+        }
+
+        if (_tutorialRoot != null && _tutorialRoot.gameObject.activeSelf)
+        {
+            _tutorialRoot.rotation = Quaternion.LookRotation(
+                _tutorialRoot.position - _cam.transform.position
             );
         }
     }

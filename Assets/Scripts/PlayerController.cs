@@ -134,6 +134,7 @@ public class PlayerController : NetworkBehaviour
 
         if (IsServer)
         {
+            TeamIndex.Value   = -1;
             PlayerColor.Value = Color.white;  // Unassigned color; LobbyZone sets it later
             bool isLobby = GamePhaseManager.Instance == null ||
                            GamePhaseManager.Instance.Phase.Value == GamePhaseManager.GamePhase.Lobby;

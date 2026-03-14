@@ -125,6 +125,7 @@ public class DashAbility : NetworkBehaviour
         // Commit
         _nextDashTime  = Time.time + cooldown;
         _mana?.SpendManaServerRpc(manaCost);
+        TutorialManager.OnWFired?.Invoke();
         _castCoroutine = null;
         _dashCoroutine = StartCoroutine(ExecuteDash(dir, effectiveDist));
     }

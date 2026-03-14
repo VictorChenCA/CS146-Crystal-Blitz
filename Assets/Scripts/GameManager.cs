@@ -1163,7 +1163,7 @@ public class GameManager : MonoBehaviour
 
         // ── Profile picture (empty circle) ───────────────────────────────
         float innerR   = circleR - xpThickness - 2f;
-        int   teamIdx  = localPc?.TeamIndex.Value ?? -1;
+        int   teamIdx   = localPc?.TeamIndex.Value ?? -1;
         Color teamColor = teamIdx == 0 ? new Color(0.2f, 0.5f,  1f,   0.9f)
                         : teamIdx == 1 ? new Color(1f,   0.25f, 0.25f, 0.9f)
                         :                new Color(1f,   1f,    1f,    0.9f);

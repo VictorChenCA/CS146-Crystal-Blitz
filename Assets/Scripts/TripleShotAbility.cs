@@ -216,6 +216,7 @@ public class TripleShotAbility : NetworkBehaviour
         // Deduct mana once before firing
         _nextFireTime = Time.time + cooldown;
         _mana?.SpendManaServerRpc(manaCost);
+        TutorialManager.OnEFired?.Invoke();
 
         float scaledDamage = damage * (1f + 0.1f * ((_xp?.Level.Value ?? 1) - 1));
 

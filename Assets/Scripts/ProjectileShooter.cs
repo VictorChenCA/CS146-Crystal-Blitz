@@ -192,6 +192,7 @@ public class ProjectileShooter : NetworkBehaviour
         float speedMult    = (_pc != null && _pc.CharacterIndex.Value == 0) ? 0.8f : 1.0f;
         float sizeMult     = (_pc != null && _pc.CharacterIndex.Value == 0) ? 1.3f : 1.0f;
         FireProjectileServerRpc(startPos, targetPos, scaledDamage, speedMult, sizeMult);
+        TutorialManager.OnQFired?.Invoke();
         _nextFireTime = Time.time + fireCooldown;
 
         // Phase 2: Animation delay — projectile in flight, can cancel lock early

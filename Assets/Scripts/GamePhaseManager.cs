@@ -178,15 +178,34 @@ public class GamePhaseManager : NetworkBehaviour
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /// <summary>Assigns a random team (0 or 1) to any player still showing white (unassigned).</summary>
+    /// <summary>Assigns teams to unassigned players, keeping team sizes as equal as possible.</summary>
     private void AssignTeamsToUnassignedPlayers()
     {
+        var unassigned = new List<PlayerController>();
+        int team0Count = 0, team1Count = 0;
+
         foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
         {
             var pc = client.PlayerObject?.GetComponent<PlayerController>();
             if (pc == null) continue;
-            if (pc.PlayerColor.Value == Color.white)
-                pc.SetTeamServerSide(Random.Range(0, 2));
+            if (pc.TeamIndex.Value == 0)      team0Count++;
+            else if (pc.TeamIndex.Value == 1) team1Count++;
+            else                              unassigned.Add(pc);
+        }
+
+        // Shuffle so assignment order is random
+        for (int i = unassigned.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (unassigned[i], unassigned[j]) = (unassigned[j], unassigned[i]);
+        }
+
+        foreach (var pc in unassigned)
+        {
+            int team = team0Count <= team1Count ? 0 : 1;
+            pc.SetTeamServerSide(team);
+            if (team == 0) team0Count++;
+            else           team1Count++;
         }
     }
 

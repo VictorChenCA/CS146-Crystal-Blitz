@@ -154,6 +154,7 @@ public class ShieldAbility : NetworkBehaviour
         // Apply effect
         _mana?.SpendManaServerRpc(manaCost);
         GrantShieldServerRpc();
+        TutorialManager.OnWFired?.Invoke();
         _nextShieldTime = Time.time + cooldown;
 
         // Animation phase
