@@ -1,10 +1,10 @@
-# NRTM
+# NRAM
 
 An ARAM-style 2.5D top-down multiplayer action game built in Unity. Two teams of players fight through a single lane, pushing minion waves and destroying the enemy crystal to win.
 
 ## Overview
 
-NRTM is a networked real-time multiplayer game using **Unity Netcode for GameObjects (NGO)**. All gameplay logic is server-authoritative — the server owns minion AI, projectile movement, damage resolution, and game phase transitions. Clients handle local input, visual feedback, and UI.
+NRAM is a networked real-time multiplayer game using **Unity Netcode for GameObjects (NGO)**. All gameplay logic is server-authoritative — the server owns minion AI, projectile movement, damage resolution, and game phase transitions. Clients handle local input, visual feedback, and UI.
 
 Players choose between two classes in the lobby — **Tank** and **Ranger** — each with distinct health pools, movement speeds, and ability kits. The game supports two control schemes switchable at runtime: **WASD** (keyboard movement) and **Point & Click** (NavMesh-driven).
 
