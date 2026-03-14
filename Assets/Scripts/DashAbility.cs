@@ -7,10 +7,13 @@ using Unity.Netcode;
 public class DashAbility : NetworkBehaviour
 {
     [Header("Dash Settings")]
-    [SerializeField] private float dashDistance     = 8f;
-    [SerializeField] private float dashDuration     = 0.15f;
-    [SerializeField] private float cooldown         = 8f;
-    [SerializeField] private float castLockDuration = 0.1f;
+    [SerializeField] private float dashDistance      = 8f;
+    [SerializeField] private float dashDuration      = 0.15f;
+    [SerializeField] private float cooldown          = 8f;
+
+    [Header("Cast Timing")]
+    [SerializeField] private float castDuration      = 0.1f;
+    [SerializeField] private float animationDuration = 0.1f;  // post-dash freeze (was castLockDuration)
 
     [Header("Arrow Visual")]
     [SerializeField] private float arrowShaftWidth  = 0.15f;
@@ -20,6 +23,7 @@ public class DashAbility : NetworkBehaviour
     public float CooldownFraction  => Mathf.Clamp01((_nextDashTime - Time.time) / cooldown);
     public float CooldownRemaining => Mathf.Max(0f, _nextDashTime - Time.time);
     public bool  IsAiming          => _aiming;
+    public float CastFraction      => _castFraction;
     public float ManaCost          => manaCost;
 
     private static readonly Vector3 MoveForward = new Vector3(1f, 0f, 1f).normalized;
@@ -38,7 +42,9 @@ public class DashAbility : NetworkBehaviour
 
     private bool      _aiming;
     private float     _nextDashTime;
+    private float     _castFraction;
     private Coroutine _dashCoroutine;
+    private Coroutine _castCoroutine;
 
     public override void OnNetworkSpawn()
     {
@@ -55,7 +61,7 @@ public class DashAbility : NetworkBehaviour
     private void Update()
     {
         if (Keyboard.current == null) return;
-        if (_dashCoroutine != null) return;
+        if (_dashCoroutine != null || _castCoroutine != null) return;
 
         if (_pc != null && _pc.CharacterIndex.Value != 1) { CancelAim(); return; }
 
@@ -94,11 +100,33 @@ public class DashAbility : NetworkBehaviour
                 Vector3 dir           = GetAimDirection();
                 float   effectiveDist = GetEffectiveDashDistance(dir);
                 CancelAim();
-                _nextDashTime  = Time.time + cooldown;
-                _mana?.SpendManaServerRpc(manaCost);
-                _dashCoroutine = StartCoroutine(ExecuteDash(dir, effectiveDist));
+                _castCoroutine = StartCoroutine(CastCoroutine(dir, effectiveDist));
             }
         }
+    }
+
+    private IEnumerator CastCoroutine(Vector3 dir, float effectiveDist)
+    {
+        // Cast phase: fill _castFraction 0→1
+        float castEnd = Time.time + castDuration;
+        while (Time.time < castEnd)
+        {
+            if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+            {
+                _castFraction  = 0f;
+                _castCoroutine = null;
+                yield break;
+            }
+            _castFraction = castDuration > 0f ? 1f - (castEnd - Time.time) / castDuration : 1f;
+            yield return null;
+        }
+        _castFraction = 0f;
+
+        // Commit
+        _nextDashTime  = Time.time + cooldown;
+        _mana?.SpendManaServerRpc(manaCost);
+        _castCoroutine = null;
+        _dashCoroutine = StartCoroutine(ExecuteDash(dir, effectiveDist));
     }
 
     private float GetEffectiveDashDistance(Vector3 dir)
@@ -134,6 +162,12 @@ public class DashAbility : NetworkBehaviour
     public void CancelAim()
     {
         _aiming = false;
+        if (_castCoroutine != null)
+        {
+            StopCoroutine(_castCoroutine);
+            _castCoroutine = null;
+            _castFraction  = 0f;
+        }
         if (_arrow != null) _arrow.enabled = false;
         BroadcastAimEndRpc();
     }
@@ -225,7 +259,7 @@ public class DashAbility : NetworkBehaviour
         if (NavMesh.SamplePosition(rawEnd, out NavMeshHit hit, effectiveDist, NavMesh.AllAreas))
             endPos = new Vector3(hit.position.x, startPos.y, hit.position.z);
 
-        float totalDur = dashDuration + castLockDuration;
+        float totalDur = dashDuration + animationDuration;
         _pc?.LockMovement(totalDur);
         _pc?.StopNavMovement();
 
@@ -256,8 +290,8 @@ public class DashAbility : NetworkBehaviour
             _agent.Warp(endPos);
         _pc?.ForceSubmitPosition(endPos);
 
-        // castLockDuration freeze — movement stays locked, player waits
-        float lockEnd = Time.time + castLockDuration;
+        // animationDuration freeze — movement stays locked, player waits
+        float lockEnd = Time.time + animationDuration;
         while (Time.time < lockEnd)
         {
             if (_health != null && _health.IsDead)

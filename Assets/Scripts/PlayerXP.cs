@@ -61,14 +61,26 @@ public class PlayerXP : NetworkBehaviour
         TryLevelUp();
     }
 
+    private const int MaxLevel = 10;
+
     private void TryLevelUp()
     {
-        while (XP.Value >= xpPerLevel)
+        while (XP.Value >= xpPerLevel && Level.Value < MaxLevel)
         {
             XP.Value -= xpPerLevel;
             Level.Value++;
             ApplyLevelUpBonuses();
         }
+        if (Level.Value >= MaxLevel)
+            XP.Value = 0f;
+    }
+
+    /// <summary>Re-applies level-up stat bonuses from scratch up to the given level. Call after respawn.</summary>
+    public void ReapplyBonuses(int toLevel)
+    {
+        if (!IsServer) return;
+        for (int i = 1; i < toLevel; i++)
+            ApplyLevelUpBonuses();
     }
 
     private void ApplyLevelUpBonuses()

@@ -264,6 +264,10 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         Color col   = pc?.PlayerColor.Value ?? Color.white;
         int charIdx = pc?.CharacterIndex.Value ?? 0;
 
+        var xpComp   = GetComponent<PlayerXP>();
+        int savedLevel = xpComp?.Level.Value ?? 1;
+        float savedXP  = xpComp?.XP.Value  ?? 0f;
+
         // Despawn(false): removes from all clients' views but keeps this server-side
         // GO alive so the coroutine can finish.
         NetworkObject.Despawn(false);
@@ -286,7 +290,16 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         var newPc = go.GetComponent<PlayerController>();
         newPc.TeamIndex.Value      = team;
         newPc.PlayerColor.Value    = col;
-        newPc.CharacterIndex.Value = charIdx;
+        newPc.CharacterIndex.Value = charIdx;  // triggers SetBaseHealth
+
+        // Restore XP/level and re-apply accumulated stat bonuses.
+        var newXp = go.GetComponent<PlayerXP>();
+        if (newXp != null)
+        {
+            newXp.Level.Value = savedLevel;
+            newXp.XP.Value    = savedXP;
+            newXp.ReapplyBonuses(savedLevel);
+        }
 
         // OnNetworkSpawn runs before TeamIndex is set so it picks the wrong position.
         // Re-teleport now that the team is assigned.

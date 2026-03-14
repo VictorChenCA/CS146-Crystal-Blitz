@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Unity.Netcode;
@@ -11,9 +12,14 @@ public class ShieldAbility : NetworkBehaviour
 {
     [Header("Shield")]
     [SerializeField] private float shieldAmount   = 50f;
+    [SerializeField] private float shieldPerLevel = 10f;
     [SerializeField] private float shieldDuration = 5f;
     [SerializeField] private float cooldown       = 12f;
     [SerializeField] private float manaCost       = 10f;
+
+    [Header("Cast Timing")]
+    [SerializeField] private float castDuration      = 0.2f;
+    [SerializeField] private float animationDuration = 0f;
 
     [Header("Ring Visual")]
     [SerializeField] private float radius   = 1.1f;
@@ -24,8 +30,13 @@ public class ShieldAbility : NetworkBehaviour
     [SerializeField] private Color color    = new Color(0.3f, 0.7f, 1f, 0.9f);
     [SerializeField] private int   segments = 48;
 
+    [Header("Aim Ring Visual")]
+    [SerializeField] private float aimRingRadius = 1.5f;
+
     public float CooldownFraction  => Mathf.Clamp01((_nextShieldTime - Time.time) / cooldown);
     public float CooldownRemaining => Mathf.Max(0f, _nextShieldTime - Time.time);
+    public float CastFraction      => _castFraction;
+    public bool  IsAiming          => _aiming;
     public float ManaCost          => manaCost;
 
     private PlayerController _pc;
@@ -33,6 +44,11 @@ public class ShieldAbility : NetworkBehaviour
     private PlayerMana       _mana;
     private float            _nextShieldTime;
     private LineRenderer[]   _rings;
+    private LineRenderer     _aimRing;
+
+    private float     _castFraction;
+    private bool      _aiming;
+    private Coroutine _castCoroutine;
 
     public override void OnNetworkSpawn()
     {
@@ -41,6 +57,7 @@ public class ShieldAbility : NetworkBehaviour
             _health.ShieldHP.OnValueChanged += OnShieldHPChanged;
 
         CreateRing();
+        CreateAimRing();
 
         if (!IsOwner) { enabled = false; return; }
         _pc   = GetComponent<PlayerController>();
@@ -55,6 +72,7 @@ public class ShieldAbility : NetworkBehaviour
         if (_rings != null)
             foreach (var r in _rings)
                 if (r != null) Destroy(r.gameObject);
+        if (_aimRing != null) Destroy(_aimRing.gameObject);
     }
 
     private void OnShieldHPChanged(float previous, float current)
@@ -63,6 +81,130 @@ public class ShieldAbility : NetworkBehaviour
         if (_rings == null) return;
         foreach (var r in _rings)
             if (r != null) r.enabled = active;
+    }
+
+    private void UpdateAimRing()
+    {
+        if (_aimRing == null) return;
+        Vector3 center = new Vector3(transform.position.x, 0.05f, transform.position.z);
+        for (int i = 0; i < segments; i++)
+        {
+            float angle = (float)i / segments * Mathf.PI * 2f;
+            _aimRing.SetPosition(i, center + new Vector3(
+                Mathf.Cos(angle) * aimRingRadius, 0f, Mathf.Sin(angle) * aimRingRadius));
+        }
+    }
+
+    private void Update()
+    {
+        if (Keyboard.current == null) return;
+        if (_pc != null && _pc.CharacterIndex.Value != 0) return;  // Tank only
+        if (_health != null && _health.IsDead) return;
+
+        bool pressed  = GameSettings.UseWasd
+            ? GameKeybinds.WasPressedThisFrame(GameKeybinds.Wasd_Ability2)
+            : GameKeybinds.WasPressedThisFrame(GameKeybinds.PnC_Ability2);
+        bool released = GameSettings.UseWasd
+            ? GameKeybinds.WasReleasedThisFrame(GameKeybinds.Wasd_Ability2)
+            : GameKeybinds.WasReleasedThisFrame(GameKeybinds.PnC_Ability2);
+
+        // Start aim on press (only if off cooldown, enough mana, not already casting)
+        if (pressed && _castCoroutine == null && Time.time >= _nextShieldTime)
+        {
+            if (_mana != null && !_mana.HasMana(manaCost)) return;
+            _aiming = true;
+            if (_aimRing != null) _aimRing.enabled = true;
+        }
+
+        if (_aiming) UpdateAimRing();
+
+        // Right-click cancels aim or cast
+        if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+        {
+            CancelCast();
+            return;
+        }
+
+        // Release while aiming → start cast
+        if (released && _aiming)
+        {
+            _aiming = false;
+            if (_aimRing != null) _aimRing.enabled = false;
+            _castCoroutine = StartCoroutine(CastCoroutine());
+        }
+    }
+
+    private IEnumerator CastCoroutine()
+    {
+        // Cast phase: fill _castFraction 0→1 over castDuration
+        float castEnd = Time.time + castDuration;
+        while (Time.time < castEnd)
+        {
+            if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+            {
+                _castFraction  = 0f;
+                _castCoroutine = null;
+                yield break;
+            }
+            _castFraction = castDuration > 0f ? 1f - (castEnd - Time.time) / castDuration : 1f;
+            yield return null;
+        }
+        _castFraction = 0f;
+
+        // Apply effect
+        _mana?.SpendManaServerRpc(manaCost);
+        GrantShieldServerRpc();
+        _nextShieldTime = Time.time + cooldown;
+
+        // Animation phase
+        if (animationDuration > 0f)
+            yield return new WaitForSeconds(animationDuration);
+
+        _castCoroutine = null;
+    }
+
+    /// <summary>Cancels any ongoing aim or cast without applying the shield or cooldown.</summary>
+    public void CancelCast()
+    {
+        _aiming = false;
+        _castFraction = 0f;
+        if (_aimRing != null) _aimRing.enabled = false;
+        if (_castCoroutine != null)
+        {
+            StopCoroutine(_castCoroutine);
+            _castCoroutine = null;
+        }
+    }
+
+    [ServerRpc]
+    private void GrantShieldServerRpc()
+    {
+        var xp = GetComponent<PlayerXP>();
+        int level = xp != null ? xp.Level.Value : 1;
+        float scaled = shieldAmount + shieldPerLevel * (level - 1);
+        GetComponent<PlayerHealth>()?.GrantShield(scaled, shieldDuration);
+    }
+
+    private void CreateAimRing()
+    {
+        var go = new GameObject("ShieldAimRing");
+        go.transform.SetParent(transform);
+
+        _aimRing = go.AddComponent<LineRenderer>();
+        _aimRing.loop              = true;
+        _aimRing.positionCount     = segments;
+        _aimRing.startWidth        = 0.12f;
+        _aimRing.endWidth          = 0.12f;
+        _aimRing.useWorldSpace     = true;
+        _aimRing.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        _aimRing.receiveShadows    = false;
+
+        var mat = new Material(Shader.Find("Sprites/Default"));
+        mat.color = new Color(color.r, color.g, color.b, 0.5f);
+        _aimRing.material = mat;
+
+        UpdateAimRing();
+        _aimRing.enabled = false;
     }
 
     private void CreateRing()
@@ -100,30 +242,5 @@ public class ShieldAbility : NetworkBehaviour
             lr.enabled = false;
             _rings[ri]  = lr;
         }
-    }
-
-    private void Update()
-    {
-        if (Keyboard.current == null) return;
-        if (_pc != null && _pc.CharacterIndex.Value != 0) return;  // Tank only
-        if (_health != null && _health.IsDead) return;
-        if (Time.time < _nextShieldTime) return;
-
-        bool pressed = GameSettings.UseWasd
-            ? GameKeybinds.WasPressedThisFrame(GameKeybinds.Wasd_Ability2)
-            : GameKeybinds.WasPressedThisFrame(GameKeybinds.PnC_Ability2);
-
-        if (!pressed) return;
-        if (_mana != null && !_mana.HasMana(manaCost)) return;
-
-        _mana?.SpendManaServerRpc(manaCost);
-        GrantShieldServerRpc();
-        _nextShieldTime = Time.time + cooldown;
-    }
-
-    [ServerRpc]
-    private void GrantShieldServerRpc()
-    {
-        GetComponent<PlayerHealth>()?.GrantShield(shieldAmount, shieldDuration);
     }
 }

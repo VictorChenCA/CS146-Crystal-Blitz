@@ -1163,10 +1163,10 @@ public class GameManager : MonoBehaviour
         {
             DrawAbilitySlot(ab2X, colTop, abilitySize, s,
                 iconW,
-                0f,
+                shield?.CastFraction      ?? 0f,
                 shield?.CooldownFraction  ?? 0f,
                 shield?.CooldownRemaining ?? 0f,
-                (health?.ShieldHP.Value ?? 0f) > 0f,
+                shield?.IsAiming ?? false,
                 shield?.ManaCost ?? 0f,
                 keybind2);
         }
@@ -1174,7 +1174,7 @@ public class GameManager : MonoBehaviour
         {
             DrawAbilitySlot(ab2X, colTop, abilitySize, s,
                 iconW,
-                0f,
+                dash?.CastFraction      ?? 0f,
                 dash?.CooldownFraction  ?? 0f,
                 dash?.CooldownRemaining ?? 0f,
                 dash?.IsAiming ?? false,
@@ -1189,7 +1189,7 @@ public class GameManager : MonoBehaviour
         {
             DrawAbilitySlot(ab3X, colTop, abilitySize, s,
                 iconE,
-                0f,
+                fanShot?.CastFraction      ?? 0f,
                 fanShot?.CooldownFraction  ?? 0f,
                 fanShot?.CooldownRemaining ?? 0f,
                 fanShot?.IsCharging ?? false,
@@ -1200,7 +1200,7 @@ public class GameManager : MonoBehaviour
         {
             DrawAbilitySlot(ab3X, colTop, abilitySize, s,
                 iconE,
-                0f,
+                tripleShot?.CastFraction      ?? 0f,
                 tripleShot?.CooldownFraction  ?? 0f,
                 tripleShot?.CooldownRemaining ?? 0f,
                 tripleShot?.IsCharging ?? false,
@@ -1293,8 +1293,9 @@ public class GameManager : MonoBehaviour
         }
         else if (cdFrac > 0.01f)
         {
-            // Cooldown: dark overlay anchored at top, draining downward
-            DrawRect(x, y, size, cdFrac * size, new Color(0f, 0f, 0f, 0.55f));
+            // Cooldown: dark overlay anchored at bottom, receding downward (icon reveals top-first)
+            float blackH = cdFrac * size;
+            DrawRect(x, y + size - blackH, size, blackH, new Color(0f, 0f, 0f, 0.55f));
             _levelStyle.fontSize  = Mathf.RoundToInt(16f * s);
             _levelStyle.alignment = TextAnchor.MiddleCenter;
             GUI.Label(new Rect(x, y, size, size), cdRemaining.ToString("0.0"), _levelStyle);

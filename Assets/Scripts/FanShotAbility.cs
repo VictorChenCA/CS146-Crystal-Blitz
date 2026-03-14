@@ -21,25 +21,37 @@ public class FanShotAbility : NetworkBehaviour
     [Tooltip("Half-angle of the fan spread in degrees. Bullets span from -spreadRadius to +spreadRadius.")]
     [SerializeField] private float spreadRadius    = 40f;
 
+    [Header("Cast Timing")]
+    [SerializeField] private float castDuration      = 0.5f;
+    [SerializeField] private float animationDuration = 0.2f;
+
+    [Header("Aim Arrow Visual")]
+    [SerializeField] private float arrowShaftWidth  = 0.12f;
+    [SerializeField] private float arrowHeadLength  = 1.2f;
+    [SerializeField] private float arrowHeadWidth   = 0.5f;
+
     [Header("Orbit Visual")]
     [SerializeField] private float orbitRadius   = 1.5f;
     [SerializeField] private float orbitSpeed    = 180f;
     [SerializeField] private float orbitBallSize = 0.25f;
 
     private const int ProjectileCount = 5;
-    private const int                RingSegments = 64;
+    private const int RingSegments    = 64;
 
     public float CooldownFraction  => Mathf.Clamp01((_nextFireTime - Time.time) / cooldown);
     public float CooldownRemaining => Mathf.Max(0f, _nextFireTime - Time.time);
-    public bool  IsCharging        => _charging;
+    public bool  IsCharging        => _charging;   // true during aim phase only
+    public float CastFraction      => _castFraction;
     public float ManaCost          => manaCost;
 
     private readonly Plane   _groundPlane = new Plane(Vector3.up, Vector3.zero);
     private Camera           _mainCamera;
     private float            _nextFireTime;
-    private bool             _charging;
+    private bool             _charging;    // aim phase flag
+    private bool             _casting;     // cast phase flag
+    private float            _castFraction;
     private float            _orbitAngle;
-    private Coroutine        _fireCoroutine;
+    private Coroutine        _castCoroutine;
     private PlayerHealth     _health;
     private PlayerMana       _mana;
     private PlayerXP         _xp;
@@ -47,14 +59,14 @@ public class FanShotAbility : NetworkBehaviour
 
     private GameObject[] _orbitBalls;
     private LineRenderer  _rangeRing;
-    private LineRenderer  _trajectoryLine;
+    private LineRenderer[] _aimArrows;
 
     public override void OnNetworkSpawn()
     {
         _pc = GetComponent<PlayerController>();
         CreateOrbitBalls();
         CreateRangeRing();
-        CreateTrajectoryLine();
+        CreateAimArrows();
 
         if (!IsOwner) { enabled = false; return; }
         _mana = GetComponent<PlayerMana>();
@@ -84,7 +96,7 @@ public class FanShotAbility : NetworkBehaviour
         bool pressed  = GameKeybinds.WasPressedThisFrame(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability3 : GameKeybinds.PnC_Ability3);
         bool released = GameKeybinds.WasReleasedThisFrame(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability3 : GameKeybinds.PnC_Ability3);
 
-        if (pressed && Time.time >= _nextFireTime && _fireCoroutine == null)
+        if (pressed && Time.time >= _nextFireTime && _castCoroutine == null)
         {
             if (_mana != null && !_mana.HasMana(manaCost)) return;
             StartCharge();
@@ -93,7 +105,7 @@ public class FanShotAbility : NetworkBehaviour
         if (_charging)
         {
             UpdateRingPosition();
-            UpdateTrajectory();
+            UpdateAimArrows();
 
             if (Mouse.current.rightButton.wasPressedThisFrame)
             {
@@ -106,9 +118,10 @@ public class FanShotAbility : NetworkBehaviour
         {
             if (GetFireTarget(out Vector3 targetPos))
             {
-                CancelCharge();
-                _nextFireTime  = Time.time + cooldown;
-                _fireCoroutine = StartCoroutine(FireSequence(targetPos));
+                _charging = false;
+                if (_rangeRing != null) _rangeRing.enabled = false;
+                SetAimArrowsVisible(false);
+                _castCoroutine = StartCoroutine(CastSequence(targetPos));
             }
             else
             {
@@ -119,17 +132,24 @@ public class FanShotAbility : NetworkBehaviour
 
     private void StartCharge()
     {
-        _charging               = true;
-        _rangeRing.enabled      = true;
-        _trajectoryLine.enabled = true;
+        _charging          = true;
+        _rangeRing.enabled = true;
+        SetAimArrowsVisible(true);
     }
 
     public void CancelCharge()
     {
         _charging = false;
+        if (_castCoroutine != null)
+        {
+            StopCoroutine(_castCoroutine);
+            _castCoroutine = null;
+        }
+        _casting      = false;
+        _castFraction = 0f;
         SetOrbitBallsVisible(false);
-        if (_rangeRing != null)      _rangeRing.enabled      = false;
-        if (_trajectoryLine != null) _trajectoryLine.enabled = false;
+        if (_rangeRing != null) _rangeRing.enabled = false;
+        SetAimArrowsVisible(false);
         BroadcastFanChargeEndRpc();
     }
 
@@ -149,8 +169,7 @@ public class FanShotAbility : NetworkBehaviour
 
     private IEnumerator NonOwnerOrbitSpin()
     {
-        float spinDuration = 360f / orbitSpeed;
-        float spinEnd      = Time.time + spinDuration;
+        float spinEnd = Time.time + castDuration;
         SetOrbitBallsVisible(true);
         while (Time.time < spinEnd)
         {
@@ -161,9 +180,9 @@ public class FanShotAbility : NetworkBehaviour
         SetOrbitBallsVisible(false);
     }
 
-    // ── Fire sequence ─────────────────────────────────────────────────────────
+    // ── Cast sequence ─────────────────────────────────────────────────────────
 
-    private IEnumerator FireSequence(Vector3 targetPos)
+    private IEnumerator CastSequence(Vector3 targetPos)
     {
         GetComponent<AutoAttacker>()?.CancelAutoAttack();
 
@@ -173,20 +192,36 @@ public class FanShotAbility : NetworkBehaviour
 
         _orbitAngle = Mathf.Atan2(dir.z, dir.x) * Mathf.Rad2Deg;
 
+        _casting = true;
         SetOrbitBallsVisible(true);
         BroadcastFanChargeStartRpc(transform.position);
 
-        float spinDuration = 360f / orbitSpeed;
-        float spinEnd      = Time.time + spinDuration;
-        while (Time.time < spinEnd)
+        // Cast phase: orbit spin fills castDuration, _castFraction 0→1
+        float castEnd = Time.time + castDuration;
+        while (Time.time < castEnd)
         {
-            _orbitAngle += orbitSpeed * Time.deltaTime;
+            if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+            {
+                _castFraction = 0f;
+                _casting      = false;
+                SetOrbitBallsVisible(false);
+                BroadcastFanChargeEndRpc();
+                _castCoroutine = null;
+                yield break;
+            }
+            _castFraction = castDuration > 0f ? 1f - (castEnd - Time.time) / castDuration : 1f;
+            _orbitAngle  += orbitSpeed * Time.deltaTime;
             UpdateOrbitBalls();
             yield return null;
         }
+
+        _castFraction = 0f;
+        _casting      = false;
         SetOrbitBallsVisible(false);
         BroadcastFanChargeEndRpc();
 
+        // Apply effect
+        _nextFireTime = Time.time + cooldown;
         _mana?.SpendManaServerRpc(manaCost);
         float scaledDamage = damage * (1f + 0.1f * ((_xp?.Level.Value ?? 1) - 1));
 
@@ -205,7 +240,11 @@ public class FanShotAbility : NetworkBehaviour
             FireProjectileServerRpc(startPos, endPos, scaledDamage);
         }
 
-        _fireCoroutine = null;
+        // Animation phase
+        if (animationDuration > 0f)
+            yield return new WaitForSeconds(animationDuration);
+
+        _castCoroutine = null;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -257,22 +296,47 @@ public class FanShotAbility : NetworkBehaviour
         }
     }
 
-    private void UpdateTrajectory()
+    private void UpdateAimArrows()
     {
-        if (_mainCamera == null) return;
-        Vector3 fp    = firePoint != null ? firePoint.position : transform.position;
-        Vector3 start = new Vector3(fp.x, 0.05f, fp.z);
-        Vector3 end   = start;
+        if (_aimArrows == null || _mainCamera == null) return;
 
+        Vector3 fp     = firePoint != null ? firePoint.position : transform.position;
+        Vector3 origin = new Vector3(fp.x, 0.05f, fp.z);
+
+        Vector3 baseDir = Vector3.forward;
         if (GetFireTarget(out Vector3 targetPos))
         {
             Vector3 flat = new Vector3(targetPos.x - fp.x, 0f, targetPos.z - fp.z);
-            flat = flat.magnitude > 0.001f ? flat.normalized * maxRange : Vector3.forward * maxRange;
-            end  = new Vector3(fp.x + flat.x, 0.05f, fp.z + flat.z);
+            if (flat.magnitude > 0.001f) baseDir = flat.normalized;
         }
 
-        _trajectoryLine.SetPosition(0, start);
-        _trajectoryLine.SetPosition(1, end);
+        for (int i = 0; i < ProjectileCount; i++)
+        {
+            float   fanAngle = ProjectileCount > 1
+                ? -spreadRadius + i * (2f * spreadRadius / (ProjectileCount - 1))
+                : 0f;
+            Vector3 dir      = Quaternion.AngleAxis(fanAngle, Vector3.up) * baseDir;
+            float   length   = maxRange;
+
+            Vector3 tip      = origin + dir * length;
+            Vector3 shaftEnd = origin + dir * (length - arrowHeadLength);
+            Vector3 perp     = new Vector3(-dir.z, 0f, dir.x) * (arrowHeadWidth * 0.5f);
+
+            var lr = _aimArrows[i];
+            lr.SetPosition(0, origin);
+            lr.SetPosition(1, shaftEnd);
+            lr.SetPosition(2, shaftEnd + perp);
+            lr.SetPosition(3, tip);
+            lr.SetPosition(4, shaftEnd - perp);
+            lr.SetPosition(5, shaftEnd);
+        }
+    }
+
+    private void SetAimArrowsVisible(bool visible)
+    {
+        if (_aimArrows == null) return;
+        foreach (var lr in _aimArrows)
+            if (lr != null) lr.enabled = visible;
     }
 
     // ── Visual creation ───────────────────────────────────────────────────────
@@ -319,24 +383,30 @@ public class FanShotAbility : NetworkBehaviour
         _rangeRing.enabled = false;
     }
 
-    private void CreateTrajectoryLine()
+    private void CreateAimArrows()
     {
-        var lineObj = new GameObject("FanShotTrajectoryLine");
-        lineObj.transform.SetParent(transform);
-
-        _trajectoryLine = lineObj.AddComponent<LineRenderer>();
-        _trajectoryLine.positionCount     = 2;
-        _trajectoryLine.startWidth        = 0.2f;
-        _trajectoryLine.endWidth          = 0.08f;
-        _trajectoryLine.useWorldSpace     = true;
-        _trajectoryLine.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        _trajectoryLine.receiveShadows    = false;
-
         var mat = new Material(Shader.Find("Sprites/Default"));
-        mat.color = new Color(0.8f, 0.4f, 1f, 0.6f);
-        _trajectoryLine.material = mat;
+        mat.color = new Color(0.8f, 0.4f, 1f, 0.7f);
 
-        _trajectoryLine.enabled = false;
+        _aimArrows = new LineRenderer[ProjectileCount];
+        for (int i = 0; i < ProjectileCount; i++)
+        {
+            var go = new GameObject($"FanShotAimArrow_{i}");
+            go.transform.SetParent(transform);
+
+            var lr = go.AddComponent<LineRenderer>();
+            lr.positionCount     = 6;
+            lr.loop              = false;
+            lr.useWorldSpace     = true;
+            lr.startWidth        = arrowShaftWidth;
+            lr.endWidth          = arrowShaftWidth;
+            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            lr.receiveShadows    = false;
+            lr.material          = mat;
+            lr.enabled           = false;
+
+            _aimArrows[i] = lr;
+        }
     }
 
     [ServerRpc]

@@ -141,7 +141,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2779140753
+  GlobalObjectIdHash: 4083207237
   InScenePlacedSourceGlobalObjectIdHash: 2779140753
   DeferredDespawnTick: 0
   Ownership: 1
@@ -169,6 +169,8 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   maxHealth: 150
   respawnDelay: 5
+  tankMaxHealth: 150
+  rangerMaxHealth: 100
   Health:
     m_InternalValue: 150
   ShieldHP:
@@ -373,10 +375,10 @@ MonoBehaviour:
   firePoint: {fileID: 8689417454509932622}
   projectileSpeed: 26
   maxRange: 18
-  damage: 400
+  damage: 40
   fireCooldown: 1.5
-  castDelay: 0.4
-  animationDelay: 0.4
+  castDuration: 0.4
+  animationDuration: 0.4
   launchOffset: 1
   manaCost: 20
 --- !u!114 &-5026939236243210125
@@ -395,7 +397,8 @@ MonoBehaviour:
   dashDistance: 8
   dashDuration: 0.4
   cooldown: 6
-  castLockDuration: 0.1
+  castDuration: 0.1
+  animationDuration: 0.1
   arrowShaftWidth: 0.15
   arrowHeadLength: 1.2
   arrowHeadWidth: 0.6
@@ -414,9 +417,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ShieldAbility
   ShowTopMostFoldoutHeaderGroup: 1
   shieldAmount: 40
+  shieldPerLevel: 10
   shieldDuration: 3
   cooldown: 8
   manaCost: 10
+  castDuration: 0.2
+  animationDuration: 0
   radius: 1.25
   height: 0.3
   spacing: 0.5
@@ -424,6 +430,7 @@ MonoBehaviour:
   width: 0.15
   color: {r: 0, g: 0.9510727, b: 1, a: 0.9}
   segments: 8
+  aimRingRadius: 1.5
 --- !u!114 &865988660502746192
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -445,6 +452,8 @@ MonoBehaviour:
   cooldown: 5
   delayBetweenShots: 0.15
   launchOffset: 0.5
+  castDuration: 0.5
+  animationDuration: 0.2
   orbitRadius: 1.5
   orbitSpeed: 360
   orbitBallSize: 0.9
@@ -471,6 +480,11 @@ MonoBehaviour:
   launchOffset: 0.5
   manaCost: 30
   spreadRadius: 30
+  castDuration: 0.5
+  animationDuration: 0.2
+  arrowShaftWidth: 0.12
+  arrowHeadLength: 1.2
+  arrowHeadWidth: 0.5
   orbitRadius: 1.5
   orbitSpeed: 360
   orbitBallSize: 0.75

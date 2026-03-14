@@ -14,6 +14,10 @@ public class TripleShotAbility : NetworkBehaviour
     [SerializeField] private float delayBetweenShots = 0.15f;
     [SerializeField] private float launchOffset      = 0.5f;
 
+    [Header("Cast Timing")]
+    [SerializeField] private float castDuration      = 0.5f;
+    [SerializeField] private float animationDuration = 0.2f;
+
     [Header("Orbit Visual")]
     [SerializeField] private float orbitRadius   = 1.5f;
     [SerializeField] private float orbitSpeed    = 180f;  // degrees per second
@@ -22,15 +26,17 @@ public class TripleShotAbility : NetworkBehaviour
 
     public float CooldownFraction  => Mathf.Clamp01((_nextFireTime - Time.time) / cooldown);
     public float CooldownRemaining => Mathf.Max(0f, _nextFireTime - Time.time);
-    public bool  IsCharging        => _charging;
+    public bool  IsCharging        => _charging;   // true during aim phase only
+    public float CastFraction      => _castFraction;
     public float ManaCost          => manaCost;
 
     private readonly Plane   _groundPlane = new Plane(Vector3.up, Vector3.zero);
     private Camera           _mainCamera;
     private float            _nextFireTime;
-    private bool             _charging;
+    private bool             _charging;    // aim phase flag
+    private float            _castFraction;
     private float            _orbitAngle;
-    private Coroutine        _fireCoroutine;
+    private Coroutine        _castCoroutine;
     private PlayerHealth     _health;
     private PlayerMana       _mana;
     private PlayerXP         _xp;
@@ -69,7 +75,7 @@ public class TripleShotAbility : NetworkBehaviour
         bool pressed  = GameKeybinds.WasPressedThisFrame(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability3 : GameKeybinds.PnC_Ability3);
         bool released = GameKeybinds.WasReleasedThisFrame(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability3 : GameKeybinds.PnC_Ability3);
 
-        if (pressed && Time.time >= _nextFireTime && _fireCoroutine == null)
+        if (pressed && Time.time >= _nextFireTime && _castCoroutine == null)
         {
             if (_mana != null && !_mana.HasMana(manaCost)) return;
             StartCharge();
@@ -91,9 +97,10 @@ public class TripleShotAbility : NetworkBehaviour
         {
             if (GetFireTarget(out Vector3 targetPos))
             {
-                CancelCharge();
-                _nextFireTime  = Time.time + cooldown;
-                _fireCoroutine = StartCoroutine(FireSequence(targetPos));
+                _charging = false;
+                if (_rangeRing != null)      _rangeRing.enabled      = false;
+                if (_trajectoryLine != null) _trajectoryLine.enabled = false;
+                _castCoroutine = StartCoroutine(CastSequence(targetPos));
             }
             else
             {
@@ -112,7 +119,13 @@ public class TripleShotAbility : NetworkBehaviour
     /// <summary>Called externally by ProjectileShooter / AutoAttacker to cancel the cast.</summary>
     public void CancelCharge()
     {
-        _charging               = false;
+        _charging = false;
+        if (_castCoroutine != null)
+        {
+            StopCoroutine(_castCoroutine);
+            _castCoroutine = null;
+        }
+        _castFraction = 0f;
         SetOrbitBallsVisible(false);
         if (_rangeRing != null)      _rangeRing.enabled      = false;
         if (_trajectoryLine != null) _trajectoryLine.enabled = false;
@@ -133,8 +146,7 @@ public class TripleShotAbility : NetworkBehaviour
 
     private IEnumerator NonOwnerOrbitSpin()
     {
-        float spinDuration = 360f / orbitSpeed;
-        float spinEnd      = Time.time + spinDuration;
+        float spinEnd = Time.time + castDuration;
         SetOrbitBallsVisible(true);
         while (Time.time < spinEnd)
         {
@@ -167,32 +179,42 @@ public class TripleShotAbility : NetworkBehaviour
         }
     }
 
-    private IEnumerator FireSequence(Vector3 targetPos)
+    private IEnumerator CastSequence(Vector3 targetPos)
     {
-        // E can be cast while moving — no movement lock
         GetComponent<AutoAttacker>()?.CancelAutoAttack();
 
         Vector3 dir = targetPos - firePoint.position;
         dir.y = 0f;
         dir   = dir.magnitude > 0.001f ? dir.normalized : firePoint.forward;
 
-        // Seed orbit angle toward the fire direction so balls start "in front"
         _orbitAngle = Mathf.Atan2(dir.z, dir.x) * Mathf.Rad2Deg;
 
-        // Show balls and spin 360°
+        // Cast phase: orbit spin fills castDuration, _castFraction 0→1
         SetOrbitBallsVisible(true);
         BroadcastChargeStartRpc(transform.position);
-        float spinDuration = 360f / orbitSpeed;
-        float spinEnd      = Time.time + spinDuration;
-        while (Time.time < spinEnd)
+
+        float castEnd = Time.time + castDuration;
+        while (Time.time < castEnd)
         {
-            _orbitAngle += orbitSpeed * Time.deltaTime;
+            if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+            {
+                _castFraction = 0f;
+                SetOrbitBallsVisible(false);
+                BroadcastChargeEndRpc();
+                _castCoroutine = null;
+                yield break;
+            }
+            _castFraction = castDuration > 0f ? 1f - (castEnd - Time.time) / castDuration : 1f;
+            _orbitAngle  += orbitSpeed * Time.deltaTime;
             UpdateOrbitBalls();
             yield return null;
         }
+
+        _castFraction = 0f;
         SetOrbitBallsVisible(false);
 
         // Deduct mana once before firing
+        _nextFireTime = Time.time + cooldown;
         _mana?.SpendManaServerRpc(manaCost);
 
         float scaledDamage = damage * (1f + 0.1f * ((_xp?.Level.Value ?? 1) - 1));
@@ -212,7 +234,11 @@ public class TripleShotAbility : NetworkBehaviour
             if (i < 2) yield return new WaitForSeconds(delayBetweenShots);
         }
 
-        _fireCoroutine = null;
+        // Animation phase
+        if (animationDuration > 0f)
+            yield return new WaitForSeconds(animationDuration);
+
+        _castCoroutine = null;
     }
 
     private bool GetFireTarget(out Vector3 worldPoint)

@@ -16,8 +16,8 @@ public class ProjectileShooter : NetworkBehaviour
     [SerializeField] private float fireCooldown = 2f;
 
     [Header("Attack Timing")]
-    [SerializeField] private float castDelay      = 0.4f;
-    [SerializeField] private float animationDelay = 0.4f;
+    [SerializeField] private float castDuration      = 0.4f;
+    [SerializeField] private float animationDuration = 0.4f;
 
     [Header("Launch")]
     [SerializeField] private float launchOffset = 0.5f;
@@ -144,7 +144,7 @@ public class ProjectileShooter : NetworkBehaviour
         var pc = GetComponent<PlayerController>();
         GetComponent<AutoAttacker>()?.CancelAutoAttack();
         GetComponent<TripleShotAbility>()?.CancelCharge();
-        pc?.LockMovement(castDelay + animationDelay);
+        pc?.LockMovement(castDuration + animationDuration);
         pc?.StopNavMovement();
 
         // Compute offset start position toward target
@@ -165,7 +165,7 @@ public class ProjectileShooter : NetworkBehaviour
         preview.transform.position = startPos;
         var previewRenderer = preview.GetComponent<Renderer>();
 
-        float castEnd = Time.time + castDelay;
+        float castEnd = Time.time + castDuration;
         while (Time.time < castEnd)
         {
             if (HasMovementInput())
@@ -176,7 +176,7 @@ public class ProjectileShooter : NetworkBehaviour
                 _attackCoroutine = null;
                 yield break;
             }
-            float t = 1f - (castEnd - Time.time) / castDelay;
+            float t = 1f - (castEnd - Time.time) / castDuration;
             _castFraction = t;
             preview.transform.localScale = Vector3.Lerp(Vector3.zero, fullScale, t);
             previewRenderer.material.color = Color.Lerp(Color.white, Color.yellow, Mathf.Pow(t, 3f));
@@ -195,7 +195,7 @@ public class ProjectileShooter : NetworkBehaviour
         _nextFireTime = Time.time + fireCooldown;
 
         // Phase 2: Animation delay — projectile in flight, can cancel lock early
-        float animEnd = Time.time + animationDelay;
+        float animEnd = Time.time + animationDuration;
         while (Time.time < animEnd)
         {
             if (HasMovementInput())
@@ -368,12 +368,12 @@ public class ProjectileShooter : NetworkBehaviour
             : Vector3.one * 0.3f;
 
         float elapsed = 0f;
-        while (elapsed < castDelay + animationDelay)
+        while (elapsed < castDuration + animationDuration)
         {
             if (_nonOwnerPreview == null) yield break;
             _nonOwnerPreview.transform.position   = firePoint != null ? firePoint.position : transform.position;
             _nonOwnerPreview.transform.localScale = Vector3.Lerp(Vector3.zero, fullScale,
-                Mathf.Clamp01(elapsed / castDelay));
+                Mathf.Clamp01(elapsed / castDuration));
             elapsed += Time.deltaTime;
             yield return null;
         }
