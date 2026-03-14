@@ -49,7 +49,7 @@ public class GameManager : MonoBehaviour
     // ── Graphics / performance settings ──────────────────────────────────────
     private int   _qualityIndex    = 2;       // 0=Low 1=Med 2=High 3=Ultra
     private float _targetFps       = 60f;     // 241 = uncapped
-    private float _guiScale        = 1f;
+    private float _guiScale        = 1.5f;
     private float _bottomBarScale  = 1f;
     private float _cursorScale     = 1f;
 
@@ -528,6 +528,7 @@ public class GameManager : MonoBehaviour
         }
 
         DrawPlayerHUD();
+        DrawFloatingNames();
 
         // Optional HUD: top-right corner
         if (!_showFps && !_showConnectionStatus && !_showLatency) return;
@@ -928,7 +929,7 @@ public class GameManager : MonoBehaviour
         GUILayout.BeginHorizontal();
         GUILayout.FlexibleSpace();
         GUILayout.Label($"{_guiScale:0.0}×", _panelLabelStyle, GUILayout.Width(Sz(60f)));
-        float newScale = GUILayout.HorizontalSlider(_guiScale, 0.5f, 2f,
+        float newScale = GUILayout.HorizontalSlider(_guiScale, 0.5f, 3f,
                                                     GUILayout.Width(segW - Sz(70f)),
                                                     GUILayout.Height(Sz(32f)));
         newScale = Mathf.Round(newScale * 10f) / 10f;
@@ -1068,6 +1069,40 @@ public class GameManager : MonoBehaviour
     // Player HUD
     // ─────────────────────────────────────────────────────────────────────────
 
+    private void DrawFloatingNames()
+    {
+        var cam = Camera.main;
+        var nm  = NetworkManager.Singleton;
+        if (cam == null || nm == null) return;
+
+        _levelStyle.fontSize  = Mathf.RoundToInt(13f * _guiScale);
+        _levelStyle.alignment = TextAnchor.MiddleCenter;
+
+        foreach (var client in nm.ConnectedClientsList)
+        {
+            var pc = client.PlayerObject?.GetComponent<PlayerController>();
+            if (pc == null) continue;
+
+            string name = pc.PlayerName.Value.Length > 0 ? pc.PlayerName.Value.ToString() : "Player";
+
+            // Project at the same anchor PlayerHealth uses (WorldHeadOffset = 2.3f, pivot bottom-center)
+            Vector3 screenPos = cam.WorldToScreenPoint(pc.transform.position + Vector3.up * 2.3f);
+            if (screenPos.z < 0f) continue;
+
+            // DrawInGameHUD has no GUI.matrix — raw screen pixel space.
+            // PlayerHealth bar: pivot=bottom-center, BarH=18px, anchored at screenPos.y (Unity Y-up).
+            const float playerBarH = 18f;
+            float gx       = screenPos.x;
+            float barTopY  = (Screen.height - screenPos.y) - playerBarH; // IMGUI Y of bar top
+
+            float labelW = 120f;
+            float nameH  = 16f;
+            GUI.Label(new Rect(gx - labelW * 0.5f, barTopY - nameH - 2f, labelW, nameH), name, _levelStyle);
+        }
+
+        _levelStyle.alignment = TextAnchor.UpperCenter;
+    }
+
     private void DrawPlayerHUD()
     {
         var nm       = NetworkManager.Singleton;
@@ -1127,8 +1162,12 @@ public class GameManager : MonoBehaviour
                   playerName, _levelStyle);
 
         // ── Profile picture (empty circle) ───────────────────────────────
-        float innerR = circleR - xpThickness - 2f;
-        GUI.color = new Color(0.1f, 0.1f, 0.1f, 0.9f);
+        float innerR   = circleR - xpThickness - 2f;
+        int   teamIdx  = localPc?.TeamIndex.Value ?? -1;
+        Color teamColor = teamIdx == 0 ? new Color(0.2f, 0.5f,  1f,   0.9f)
+                        : teamIdx == 1 ? new Color(1f,   0.25f, 0.25f, 0.9f)
+                        :                new Color(1f,   1f,    1f,    0.9f);
+        GUI.color = teamColor;
         GUI.DrawTexture(new Rect(circleC.x - innerR, circleC.y - innerR, innerR * 2f, innerR * 2f),
                         _circleTex);
         GUI.color = Color.white;

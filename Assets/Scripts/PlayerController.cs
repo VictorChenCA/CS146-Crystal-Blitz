@@ -97,7 +97,7 @@ public class PlayerController : NetworkBehaviour
     );
 
     public NetworkVariable<int> TeamIndex = new NetworkVariable<int>(
-        0,
+        -1,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
