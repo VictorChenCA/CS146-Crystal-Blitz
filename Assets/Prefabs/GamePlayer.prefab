@@ -191,7 +191,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMana
   ShowTopMostFoldoutHeaderGroup: 1
   baseMana: 200
-  manaRegenPerSecond: 3
+  manaRegenPerSecond: 4
   spawnRegenPerTick: 5
   spawnRegenTickRate: 4
   Mana:
@@ -234,6 +234,10 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   moveSpeed: 6
   groundY: 1
+  tankXZScale: 1.25
+  tankMoveSpeed: 7.5
+  rangerXZScale: 1
+  rangerMoveSpeed: 8
   Position:
     m_InternalValue: {x: 0, y: 0, z: 0}
   TeamIndex:
@@ -369,7 +373,7 @@ MonoBehaviour:
   firePoint: {fileID: 8689417454509932622}
   projectileSpeed: 26
   maxRange: 18
-  damage: 40
+  damage: 400
   fireCooldown: 1.5
   castDelay: 0.4
   animationDelay: 0.4
@@ -460,12 +464,13 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   projectilePrefab: {fileID: 8423999069295360159, guid: 460d6553865ca48cf9b03e801a4b64db, type: 3}
   firePoint: {fileID: 8689417454509932622}
-  projectileSpeed: 14
+  projectileSpeed: 18
   maxRange: 20
   damage: 20
   cooldown: 5
   launchOffset: 0.5
   manaCost: 30
+  spreadRadius: 30
   orbitRadius: 1.5
   orbitSpeed: 360
   orbitBallSize: 0.75

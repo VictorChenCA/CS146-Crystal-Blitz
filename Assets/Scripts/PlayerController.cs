@@ -63,6 +63,15 @@ public class PlayerController : NetworkBehaviour
     private const float  IndicatorExpandDuration = 0.2f;
     private const float  IndicatorFullRadius     = 0.45f;
 
+    // ── Character stats ───────────────────────────────────────────────────────
+    [Header("Tank Stats")]
+    [SerializeField] private float tankXZScale = 1.15f;
+    [SerializeField] private float tankMoveSpeed = 8f;
+
+    [Header("Ranger Stats")]
+    [SerializeField] private float rangerXZScale = 0.85f;
+    [SerializeField] private float rangerMoveSpeed = 10f;
+
     // ── Base scale (stored before character appearance modifies it) ───────────
     private Vector3 _baseScale;
 
@@ -213,13 +222,13 @@ public class PlayerController : NetworkBehaviour
 
     private void ApplyCharacterAppearance(int index)
     {
-        float xzMult = index == 0 ? 1.15f : 0.85f;
+        float xzMult = index == 0 ? tankXZScale : rangerXZScale;
         transform.localScale = new Vector3(
             _baseScale.x * xzMult,
             _baseScale.y,
             _baseScale.z * xzMult);
 
-        moveSpeed = index == 0 ? 8f : 10f;
+        moveSpeed = index == 0 ? tankMoveSpeed : rangerMoveSpeed;
         if (_agent != null && _agent.enabled)
             _agent.speed = moveSpeed;
     }

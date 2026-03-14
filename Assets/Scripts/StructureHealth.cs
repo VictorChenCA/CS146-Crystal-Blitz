@@ -76,6 +76,25 @@ public class StructureHealth : NetworkBehaviour, IDamageable
         if (!IsServer) return;
         Health.Value  = maxHealth;
         IsAlive.Value = true;
+        ResetChildRotationsRpc();
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void ResetChildRotationsRpc()
+    {
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            Transform child = transform.GetChild(i);
+            Vector3 euler = child.eulerAngles;
+            child.eulerAngles = new Vector3(euler.x + 180f, euler.y, euler.z);
+
+            for (int j = 0; j < child.childCount; j++)
+            {
+                Transform grandChild = child.GetChild(j);
+                Vector3 ge = grandChild.eulerAngles;
+                grandChild.eulerAngles = new Vector3(ge.x + 180f, ge.y, ge.z);
+            }
+        }
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────

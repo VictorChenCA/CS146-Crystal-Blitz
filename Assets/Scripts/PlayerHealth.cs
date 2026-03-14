@@ -9,6 +9,12 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     [SerializeField] private float maxHealth    = 100f;
     [SerializeField] private float respawnDelay = 3f;
 
+    [Header("Tank Stats")]
+    [SerializeField] private float tankMaxHealth = 150f;
+
+    [Header("Ranger Stats")]
+    [SerializeField] private float rangerMaxHealth = 100f;
+
     // Bar dimensions in screen pixels.
     private const float BarW = 140f;
     private const float BarH = 18f;
@@ -145,14 +151,14 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     public void SetBaseHealth(int charIndex)
     {
         if (!IsServer) return;
-        maxHealth    = charIndex == 0 ? 150f : 100f;
+        maxHealth    = charIndex == 0 ? tankMaxHealth : rangerMaxHealth;
         Health.Value = maxHealth;
     }
 
     // Called on non-server clients when CharacterIndex changes
     public void ClientUpdateMaxHealth(int charIdx)
     {
-        maxHealth = charIdx == 0 ? 150f : 100f;
+        maxHealth = charIdx == 0 ? tankMaxHealth : rangerMaxHealth;
         UpdateBar(Health.Value);
     }
 

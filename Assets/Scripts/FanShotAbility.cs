@@ -18,13 +18,15 @@ public class FanShotAbility : NetworkBehaviour
     [SerializeField] private float cooldown        = 10f;
     [SerializeField] private float launchOffset    = 0.5f;
     [SerializeField] private float manaCost        = 30f;
+    [Tooltip("Half-angle of the fan spread in degrees. Bullets span from -spreadRadius to +spreadRadius.")]
+    [SerializeField] private float spreadRadius    = 40f;
 
     [Header("Orbit Visual")]
     [SerializeField] private float orbitRadius   = 1.5f;
     [SerializeField] private float orbitSpeed    = 180f;
     [SerializeField] private float orbitBallSize = 0.25f;
 
-    private static readonly float[] FanAngles = { -40f, -20f, 0f, 20f, 40f };
+    private const int ProjectileCount = 5;
     private const int                RingSegments = 64;
 
     public float CooldownFraction  => Mathf.Clamp01((_nextFireTime - Time.time) / cooldown);
@@ -189,8 +191,11 @@ public class FanShotAbility : NetworkBehaviour
         float scaledDamage = damage * (1f + 0.1f * ((_xp?.Level.Value ?? 1) - 1));
 
         Vector3 fp = firePoint != null ? firePoint.position : transform.position;
-        foreach (float fanAngle in FanAngles)
+        for (int i = 0; i < ProjectileCount; i++)
         {
+            float fanAngle    = ProjectileCount > 1
+                ? -spreadRadius + i * (2f * spreadRadius / (ProjectileCount - 1))
+                : 0f;
             Quaternion rot    = Quaternion.AngleAxis(fanAngle, Vector3.up);
             Vector3    fanDir = rot * dir;
             Vector3 startPos  = new Vector3(
