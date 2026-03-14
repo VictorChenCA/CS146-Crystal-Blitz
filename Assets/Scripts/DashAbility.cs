@@ -71,6 +71,7 @@ public class DashAbility : NetworkBehaviour
             CancelAim();
             return;
         }
+        if (GameManager.ChatOpen) return;
 
         bool pressed  = GameSettings.UseWasd
             ? GameKeybinds.WasPressedThisFrame(GameKeybinds.Wasd_Ability2)

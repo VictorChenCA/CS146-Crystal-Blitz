@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -24,15 +25,24 @@ public class GameManager : MonoBehaviour
     [SerializeField] private bool _useRelay = false;
     private string _joinCode = "";
     private string _relayError = "";
-    private bool  _relayBusy   = false;
+    private bool _relayBusy = false;
     private float _copiedUntil = -1f;
 
     // ── Kill / Death HUD ─────────────────────────────────────────────────────
-    private float  _deathTimerEnd    = -1f;
-    private string _killMessage      = "";
-    private float  _killMessageEnd   = -1f;
-    private string _lobbyMessage     = "";
-    private float  _lobbyMessageEnd  = -1f;
+    private float _deathTimerEnd = -1f;
+    private string _killMessage = "";
+    private float _killMessageEnd = -1f;
+    private string _lobbyMessage = "";
+    private float _lobbyMessageEnd = -1f;
+
+    // ── Chat ──────────────────────────────────────────────────────────────────
+    public static bool ChatOpen { get; private set; }
+    private bool _chatActive;
+    private bool _chatJustOpened;
+    private string _chatInput = "";
+    private readonly List<(string text, float expiry)> _chatMessages = new();
+    private const int ChatMaxMessages = 8;
+    private const float ChatMessageDuration = 10f;
 
     // ── FPS counter ──────────────────────────────────────────────────────────
     private float _fpsAccum = 0f;
@@ -47,17 +57,18 @@ public class GameManager : MonoBehaviour
     private bool _useWasd = true;
 
     // ── Graphics / performance settings ──────────────────────────────────────
-    private int   _qualityIndex    = 2;       // 0=Low 1=Med 2=High 3=Ultra
-    private float _targetFps       = 60f;     // 241 = uncapped
-    private float _guiScale        = 1.5f;
-    private float _bottomBarScale  = 1f;
-    private float _cursorScale     = 1f;
+    private int _qualityIndex = 2;       // 0=Low 1=Med 2=High 3=Ultra
+    private float _targetFps = 60f;     // 241 = uncapped
+    private float _guiScale = 1.5f;
+    private float _bottomBarScale = 1f;
+    private float _cursorScale = 1f;
+    private float _chatScale = 1f;
 
     // ── Settings panel state ──────────────────────────────────────────────────
-    private int     _settingsTab      = 0;   // 0=General 1=Graphics 2=Keybinds
-    private int     _keybindTab       = 0;   // 0=WASD 1=P&C
-    private int     _prevSettingsTab  = -1;
-    private string  _rebindTarget     = null;
+    private int _settingsTab = 0;   // 0=General 1=Graphics 2=Keybinds
+    private int _keybindTab = 0;   // 0=WASD 1=P&C
+    private int _prevSettingsTab = -1;
+    private string _rebindTarget = null;
     private Vector2 _settingsScrollPos;
 
     // ── Textures (created in Awake, destroyed in OnDestroy) ──────────────────
@@ -113,6 +124,7 @@ public class GameManager : MonoBehaviour
     private GUIStyle _panelLabelStyle;
     private GUIStyle _textFieldStyle;
     private GUIStyle _tooltipStyle;
+    private GUIStyle _chatStyle;
     private bool _stylesInitialized;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -121,11 +133,11 @@ public class GameManager : MonoBehaviour
 
     private void Awake()
     {
-        _dimOverlayTex  = MakeTex(new Color(0f,    0f,    0f,   0.6f));
-        _whitePanelTex  = MakeTex(new Color(1f,    1f,    1f,   0.95f));
-        _segActiveTex   = MakeTex(new Color(0.18f, 0.38f, 0.72f, 1f));
+        _dimOverlayTex = MakeTex(new Color(0f, 0f, 0f, 0.6f));
+        _whitePanelTex = MakeTex(new Color(1f, 1f, 1f, 0.95f));
+        _segActiveTex = MakeTex(new Color(0.18f, 0.38f, 0.72f, 1f));
         _segInactiveTex = MakeTex(new Color(0.82f, 0.82f, 0.82f, 1f));
-        _circleTex      = MakeCircleTex(128);
+        _circleTex = MakeCircleTex(128);
 
         ApplyRenderScale(_qualityIndex);
         Application.targetFrameRate = (int)_targetFps;
@@ -146,12 +158,14 @@ public class GameManager : MonoBehaviour
     {
         PlayerHealth.OnLocalPlayerDeath += HandleLocalPlayerDeath;
         PlayerHealth.OnKillAnnouncement += HandleKillAnnouncement;
+        PlayerController.OnChatMessage += HandleChatMessage;
     }
 
     private void OnDisable()
     {
         PlayerHealth.OnLocalPlayerDeath -= HandleLocalPlayerDeath;
         PlayerHealth.OnKillAnnouncement -= HandleKillAnnouncement;
+        PlayerController.OnChatMessage -= HandleChatMessage;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -165,12 +179,21 @@ public class GameManager : MonoBehaviour
         _killMessageEnd = Time.time + 4f;
     }
 
+    private void HandleChatMessage(string line)
+    {
+        _chatMessages.Add((line, Time.time + ChatMessageDuration));
+        if (_chatMessages.Count > ChatMaxMessages)
+            _chatMessages.RemoveAt(0);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Update
     // ─────────────────────────────────────────────────────────────────────────
 
     private void Update()
     {
+        _chatJustOpened = false;  // cleared once per frame; set below if chat opens this frame
+
         // FPS accumulation
         _fpsAccum += Time.unscaledDeltaTime;
         _fpsFrames += 1;
@@ -185,7 +208,7 @@ public class GameManager : MonoBehaviour
         var nm = NetworkManager.Singleton;
 
         // Cursor always visible (used for projectile aiming and P&C movement)
-        Cursor.visible   = true;
+        Cursor.visible = true;
         Cursor.lockState = CursorLockMode.None;
 
         // NetworkManager gone → back to main menu
@@ -201,7 +224,22 @@ public class GameManager : MonoBehaviour
 
         bool escPressed = Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
 
-        if (escPressed)
+        // Open chat with Enter (in-game only, when chat isn't already open)
+        if (_state == UIState.InGame && !_chatActive &&
+            Keyboard.current != null && Keyboard.current.enterKey.wasPressedThisFrame)
+        {
+            _chatActive = true;
+            _chatJustOpened = true;
+            ChatOpen = true;
+        }
+
+        if (escPressed && _chatActive)
+        {
+            _chatInput = "";
+            _chatActive = false;
+            ChatOpen = false;
+        }
+        else if (escPressed)
         {
             if (_state == UIState.InGame)
             {
@@ -240,10 +278,10 @@ public class GameManager : MonoBehaviour
             GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _dimOverlayTex);
             var promptStyle = new GUIStyle(GUI.skin.box)
             {
-                fontSize  = 28,
+                fontSize = 28,
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
-                normal    = { textColor = Color.white }
+                normal = { textColor = Color.white }
             };
             float pw = 400f, ph = 80f;
             GUI.Box(new Rect((Screen.width - pw) * 0.5f, (Screen.height - ph) * 0.5f, pw, ph),
@@ -287,8 +325,8 @@ public class GameManager : MonoBehaviour
     private float DrawLobbyBanner(GamePhaseManager gpm, float startY)
     {
         float sw = Screen.width;
-        float w  = 700f, h = 50f;
-        float x  = (sw - w) * 0.5f;
+        float w = 700f, h = 50f;
+        float x = (sw - w) * 0.5f;
 
         int total = NetworkManager.Singleton != null
             ? NetworkManager.Singleton.ConnectedClientsList.Count : 1;
@@ -326,14 +364,31 @@ public class GameManager : MonoBehaviour
     private void DrawMainMenu()
     {
         GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(_guiScale, _guiScale, 1f));
-        float sw = Screen.width  / _guiScale;
+        float sw = Screen.width / _guiScale;
         float sh = Screen.height / _guiScale;
 
         // Title
-        float titleW = 600f, titleH = 80f;
+        float titleW = 1000f, titleH = 80f;
         float titleX = (sw - titleW) * 0.5f;
         float titleY = sh * 0.22f;
-        GUI.Label(new Rect(titleX, titleY, titleW, titleH), "NRAM", _titleStyle);
+        {
+            Rect tr = new Rect(titleX, titleY, titleW, titleH);
+            string titleText = "Crystal Blitz - NRAM";
+            float tpx = 2f;
+            Color tfg = _titleStyle.normal.textColor;
+            var tshadow = new Color(0f, 0f, 0f, 0.85f);
+            _titleStyle.normal.textColor = tshadow;
+            _titleStyle.hover.textColor = tshadow;
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    if (dx == 0 && dy == 0) continue;
+                    GUI.Label(new Rect(tr.x + dx * tpx, tr.y + dy * tpx, tr.width, tr.height), titleText, _titleStyle);
+                }
+            _titleStyle.normal.textColor = tfg;
+            _titleStyle.hover.textColor = tfg;
+            GUI.Label(tr, titleText, _titleStyle);
+        }
 
         // Subtitle
         float subW = 600f, subH = 36f;
@@ -529,13 +584,14 @@ public class GameManager : MonoBehaviour
 
         DrawPlayerHUD();
         DrawFloatingNames();
+        DrawChat();
 
         // Optional HUD: top-right corner
         if (!_showFps && !_showConnectionStatus && !_showLatency) return;
 
         _hudLabelStyle.fontSize = Sz(18);
-        float hudX  = Screen.width - Sz(220f);
-        float hudY  = 10f;
+        float hudX = Screen.width - Sz(220f);
+        float hudY = 10f;
         float lineH = Sz(28f);
 
         float hudW = Sz(210f);
@@ -588,18 +644,18 @@ public class GameManager : MonoBehaviour
     private static Key GetBoundKey(string field) => field switch
     {
         "Wasd_MoveForward" => GameKeybinds.Wasd_MoveForward,
-        "Wasd_MoveBack"    => GameKeybinds.Wasd_MoveBack,
-        "Wasd_MoveLeft"    => GameKeybinds.Wasd_MoveLeft,
-        "Wasd_MoveRight"   => GameKeybinds.Wasd_MoveRight,
-        "Wasd_Ability1"    => GameKeybinds.Wasd_Ability1,
-        "Wasd_Ability2"    => GameKeybinds.Wasd_Ability2,
-        "Wasd_Ability3"    => GameKeybinds.Wasd_Ability3,
-        "PnC_Stop"         => GameKeybinds.PnC_Stop,
-        "PnC_Ability1"     => GameKeybinds.PnC_Ability1,
-        "PnC_Ability2"     => GameKeybinds.PnC_Ability2,
-        "PnC_Ability3"     => GameKeybinds.PnC_Ability3,
-        "PnC_ForceAA"      => GameKeybinds.PnC_ForceAA,
-        _                  => Key.None
+        "Wasd_MoveBack" => GameKeybinds.Wasd_MoveBack,
+        "Wasd_MoveLeft" => GameKeybinds.Wasd_MoveLeft,
+        "Wasd_MoveRight" => GameKeybinds.Wasd_MoveRight,
+        "Wasd_Ability1" => GameKeybinds.Wasd_Ability1,
+        "Wasd_Ability2" => GameKeybinds.Wasd_Ability2,
+        "Wasd_Ability3" => GameKeybinds.Wasd_Ability3,
+        "PnC_Stop" => GameKeybinds.PnC_Stop,
+        "PnC_Ability1" => GameKeybinds.PnC_Ability1,
+        "PnC_Ability2" => GameKeybinds.PnC_Ability2,
+        "PnC_Ability3" => GameKeybinds.PnC_Ability3,
+        "PnC_ForceAA" => GameKeybinds.PnC_ForceAA,
+        _ => Key.None
     };
 
     private static void SetBoundKey(string field, Key key)
@@ -607,17 +663,17 @@ public class GameManager : MonoBehaviour
         switch (field)
         {
             case "Wasd_MoveForward": GameKeybinds.Wasd_MoveForward = key; break;
-            case "Wasd_MoveBack":    GameKeybinds.Wasd_MoveBack    = key; break;
-            case "Wasd_MoveLeft":    GameKeybinds.Wasd_MoveLeft    = key; break;
-            case "Wasd_MoveRight":   GameKeybinds.Wasd_MoveRight   = key; break;
-            case "Wasd_Ability1":    GameKeybinds.Wasd_Ability1    = key; break;
-            case "Wasd_Ability2":    GameKeybinds.Wasd_Ability2    = key; break;
-            case "Wasd_Ability3":    GameKeybinds.Wasd_Ability3    = key; break;
-            case "PnC_Stop":         GameKeybinds.PnC_Stop         = key; break;
-            case "PnC_Ability1":     GameKeybinds.PnC_Ability1     = key; break;
-            case "PnC_Ability2":     GameKeybinds.PnC_Ability2     = key; break;
-            case "PnC_Ability3":     GameKeybinds.PnC_Ability3     = key; break;
-            case "PnC_ForceAA":      GameKeybinds.PnC_ForceAA      = key; break;
+            case "Wasd_MoveBack": GameKeybinds.Wasd_MoveBack = key; break;
+            case "Wasd_MoveLeft": GameKeybinds.Wasd_MoveLeft = key; break;
+            case "Wasd_MoveRight": GameKeybinds.Wasd_MoveRight = key; break;
+            case "Wasd_Ability1": GameKeybinds.Wasd_Ability1 = key; break;
+            case "Wasd_Ability2": GameKeybinds.Wasd_Ability2 = key; break;
+            case "Wasd_Ability3": GameKeybinds.Wasd_Ability3 = key; break;
+            case "PnC_Stop": GameKeybinds.PnC_Stop = key; break;
+            case "PnC_Ability1": GameKeybinds.PnC_Ability1 = key; break;
+            case "PnC_Ability2": GameKeybinds.PnC_Ability2 = key; break;
+            case "PnC_Ability3": GameKeybinds.PnC_Ability3 = key; break;
+            case "PnC_ForceAA": GameKeybinds.PnC_ForceAA = key; break;
         }
         GameKeybinds.Save();
     }
@@ -688,11 +744,11 @@ public class GameManager : MonoBehaviour
         // Panel
         float panelW = Mathf.Min(sw * 0.9f, Sz(720f));
         float panelH = sh * 0.82f;
-        Rect  panelR = new Rect((sw - panelW) * 0.5f, (sh - panelH) * 0.5f, panelW, panelH);
+        Rect panelR = new Rect((sw - panelW) * 0.5f, (sh - panelH) * 0.5f, panelW, panelH);
         GUI.DrawTexture(panelR, _whitePanelTex);
 
         float pad = Sz(22f);
-        Rect  innerR = new Rect(panelR.x + pad, panelR.y + pad,
+        Rect innerR = new Rect(panelR.x + pad, panelR.y + pad,
                                  panelR.width - pad * 2f, panelR.height - pad * 2f);
         GUILayout.BeginArea(innerR);
 
@@ -703,7 +759,7 @@ public class GameManager : MonoBehaviour
 
         // Tab bar
         float tabH = Sz(38f);
-        _segActiveStyle.fontSize   = Sz(17);
+        _segActiveStyle.fontSize = Sz(17);
         _segInactiveStyle.fontSize = Sz(17);
         GUILayout.BeginHorizontal();
         string[] tabNames = { "General", "Graphics", "Keybinds" };
@@ -725,25 +781,25 @@ public class GameManager : MonoBehaviour
         GUILayout.Space(Sz(6f));
 
         // Scroll view — explicit height so title + tab bar are never displaced
-        float titleH   = Sz(34f + 6f);   // label + space below
-        float tabRowH  = tabH + Sz(6f);  // tab buttons + space below
-        float scrollH  = innerR.height - titleH - tabRowH;
+        float titleH = Sz(34f + 6f);   // label + space below
+        float tabRowH = tabH + Sz(6f);  // tab buttons + space below
+        float scrollH = innerR.height - titleH - tabRowH;
         _settingsScrollPos = GUILayout.BeginScrollView(_settingsScrollPos,
                                                         GUILayout.Height(scrollH));
         switch (_settingsTab)
         {
-            case 0: DrawGeneralTab();   break;
-            case 1: DrawGraphicsTab();  break;
-            case 2: DrawKeybindsTab();  break;
+            case 0: DrawGeneralTab(); break;
+            case 1: DrawGraphicsTab(); break;
+            case 2: DrawKeybindsTab(); break;
         }
         GUILayout.EndScrollView();
 
         GUILayout.EndArea();
 
         // Close button — top-right of panel
-        bool   fromInGame  = _settingsPreviousState == UIState.InGame;
-        string closeLabel  = fromInGame ? "✕" : "←";
-        float  cbSize      = Sz(48f);
+        bool fromInGame = _settingsPreviousState == UIState.InGame;
+        string closeLabel = fromInGame ? "✕" : "←";
+        float cbSize = Sz(48f);
         if (GUI.Button(new Rect(panelR.xMax - cbSize - 8f, panelR.y + 8f, cbSize, cbSize),
                        closeLabel, _buttonStyle))
             _state = _settingsPreviousState;
@@ -753,10 +809,10 @@ public class GameManager : MonoBehaviour
     {
         float segW = 440f * _guiScale;
         float segH = Sz(44f);
-        _panelLabelStyle.fontSize  = Sz(18);
-        _segActiveStyle.fontSize   = Sz(20);
+        _panelLabelStyle.fontSize = Sz(18);
+        _segActiveStyle.fontSize = Sz(20);
         _segInactiveStyle.fontSize = Sz(20);
-        _toggleStyle.fontSize      = Sz(18);
+        _toggleStyle.fontSize = Sz(18);
 
         // ── Controller ────────────────────────────────────────────────────
         GUILayout.Label("Controller", _panelLabelStyle);
@@ -765,7 +821,7 @@ public class GameManager : MonoBehaviour
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("WASD", _useWasd ? _segActiveStyle : _segInactiveStyle,
                              GUILayout.Width(segW * 0.5f), GUILayout.Height(segH)))
-        { _useWasd = true;  GameSettings.UseWasd = true;  _keybindTab = 0; }
+        { _useWasd = true; GameSettings.UseWasd = true; _keybindTab = 0; }
         if (GUILayout.Button("Point & Click", !_useWasd ? _segActiveStyle : _segInactiveStyle,
                              GUILayout.Width(segW * 0.5f), GUILayout.Height(segH)))
         { _useWasd = false; GameSettings.UseWasd = false; _keybindTab = 1; }
@@ -780,9 +836,9 @@ public class GameManager : MonoBehaviour
         float overlayW = Sz(180f);
         GUILayout.BeginHorizontal();
         GUILayout.FlexibleSpace();
-        _showFps              = GUILayout.Toggle(_showFps,              "Show FPS",         _toggleStyle, GUILayout.Width(overlayW));
-        _showConnectionStatus = GUILayout.Toggle(_showConnectionStatus, "Show Connection",   _toggleStyle, GUILayout.Width(overlayW));
-        _showLatency          = GUILayout.Toggle(_showLatency,          "Show Latency",      _toggleStyle, GUILayout.Width(overlayW));
+        _showFps = GUILayout.Toggle(_showFps, "Show FPS", _toggleStyle, GUILayout.Width(overlayW));
+        _showConnectionStatus = GUILayout.Toggle(_showConnectionStatus, "Show Connection", _toggleStyle, GUILayout.Width(overlayW));
+        _showLatency = GUILayout.Toggle(_showLatency, "Show Latency", _toggleStyle, GUILayout.Width(overlayW));
         GUILayout.FlexibleSpace();
         GUILayout.EndHorizontal();
 
@@ -814,16 +870,18 @@ public class GameManager : MonoBehaviour
         if (GUILayout.Button("Reset All Settings to Defaults", _buttonStyle,
                              GUILayout.Width(Sz(300f)), GUILayout.Height(Sz(44f))))
         {
-            _guiScale     = 1f;
+            _guiScale = 1f;
             _bottomBarScale = 1f;
-            _cursorScale  = 1f;
+            _cursorScale = 1f;
+            _chatScale = 1f;
             _qualityIndex = 2;
-            _targetFps    = 60f;
-            _showFps      = false;
+            _targetFps = 60f;
+            _showFps = false;
             _showConnectionStatus = false;
-            _showLatency  = false;
+            _showLatency = false;
             GameSettings.BottomBarScale = 1f;
-            GameSettings.CursorScale    = 1f;
+            GameSettings.CursorScale = 1f;
+            GameSettings.ChatScale = 1f;
             Application.targetFrameRate = 60;
             ApplyRenderScale(_qualityIndex);
             GameKeybinds.ResetToDefaults();
@@ -844,10 +902,10 @@ public class GameManager : MonoBehaviour
                                  GUILayout.Width(Sz(280f)), GUILayout.Height(Sz(44f))))
             {
                 nm.Shutdown();
-                _relayBusy  = false;
-                _joinCode   = "";
+                _relayBusy = false;
+                _joinCode = "";
                 _relayError = "";
-                _state      = UIState.MainMenu;
+                _state = UIState.MainMenu;
             }
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
@@ -870,8 +928,8 @@ public class GameManager : MonoBehaviour
     {
         float segW = 460f * _guiScale;
         float segH = Sz(44f);
-        _panelLabelStyle.fontSize  = Sz(18);
-        _segActiveStyle.fontSize   = Sz(20);
+        _panelLabelStyle.fontSize = Sz(18);
+        _segActiveStyle.fontSize = Sz(20);
         _segInactiveStyle.fontSize = Sz(20);
 
         GUILayout.Label("Graphics Quality", _panelLabelStyle);
@@ -894,10 +952,10 @@ public class GameManager : MonoBehaviour
 
         GUILayout.Space(Sz(6f));
         _panelLabelStyle.fontStyle = FontStyle.Normal;
-        _panelLabelStyle.fontSize  = Sz(15);
+        _panelLabelStyle.fontSize = Sz(15);
         GUILayout.Label($"Render Scale: {RenderScales[_qualityIndex]:0.00}×", _panelLabelStyle);
         _panelLabelStyle.fontStyle = FontStyle.Bold;
-        _panelLabelStyle.fontSize  = Sz(18);
+        _panelLabelStyle.fontSize = Sz(18);
 
         GUILayout.Space(Sz(14f));
 
@@ -978,19 +1036,39 @@ public class GameManager : MonoBehaviour
         GUILayout.FlexibleSpace();
         GUILayout.EndHorizontal();
 
+        GUILayout.Space(Sz(14f));
+
+        // ── Chat Scale ────────────────────────────────────────────────────
+        GUILayout.Label("Chat Scale", _panelLabelStyle);
+        GUILayout.Space(Sz(4f));
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        GUILayout.Label($"{_chatScale:0.0}×", _panelLabelStyle, GUILayout.Width(Sz(60f)));
+        float newChat = GUILayout.HorizontalSlider(_chatScale, 0.5f, 2f,
+                                                    GUILayout.Width(segW - Sz(70f)),
+                                                    GUILayout.Height(Sz(32f)));
+        newChat = Mathf.Round(newChat * 10f) / 10f;
+        if (!Mathf.Approximately(newChat, _chatScale))
+        {
+            _chatScale = newChat;
+            GameSettings.ChatScale = _chatScale;
+        }
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
         GUILayout.Space(Sz(8f));
     }
 
     private void DrawKeybindsTab()
     {
-        float segH   = Sz(38f);
+        float segH = Sz(38f);
         float labelW = Sz(230f);
-        float btnW   = Sz(120f);
-        _panelLabelStyle.fontSize  = Sz(17);
-        _panelTitleStyle.fontSize  = Sz(20);
-        _segActiveStyle.fontSize   = Sz(16);
+        float btnW = Sz(120f);
+        _panelLabelStyle.fontSize = Sz(17);
+        _panelTitleStyle.fontSize = Sz(20);
+        _segActiveStyle.fontSize = Sz(16);
         _segInactiveStyle.fontSize = Sz(16);
-        _buttonStyle.fontSize      = Sz(17);
+        _buttonStyle.fontSize = Sz(17);
 
         // Sub-tab row
         GUILayout.BeginHorizontal();
@@ -998,7 +1076,7 @@ public class GameManager : MonoBehaviour
         if (GUILayout.Button("WASD Mode",
                 _keybindTab == 0 ? _segActiveStyle : _segInactiveStyle,
                 GUILayout.Width(Sz(160f)), GUILayout.Height(segH)))
-        { _keybindTab = 0; _useWasd = true;  GameSettings.UseWasd = true; }
+        { _keybindTab = 0; _useWasd = true; GameSettings.UseWasd = true; }
         if (GUILayout.Button("Point & Click",
                 _keybindTab == 1 ? _segActiveStyle : _segInactiveStyle,
                 GUILayout.Width(Sz(160f)), GUILayout.Height(segH)))
@@ -1018,7 +1096,7 @@ public class GameManager : MonoBehaviour
         var prevAlign = _panelLabelStyle.alignment;
         foreach (var (label, field) in bindings)
         {
-            Key  currentKey  = GetBoundKey(field);
+            Key currentKey = GetBoundKey(field);
             bool isRebinding = _rebindTarget == field;
 
             GUILayout.BeginHorizontal();
@@ -1028,7 +1106,7 @@ public class GameManager : MonoBehaviour
             _panelLabelStyle.alignment = prevAlign;
 
             GUIStyle btnStyle = isRebinding ? _segActiveStyle : _segInactiveStyle;
-            string btnLabel   = isRebinding ? "Press a key..." : GameKeybinds.KeyName(currentKey);
+            string btnLabel = isRebinding ? "Press a key..." : GameKeybinds.KeyName(currentKey);
             if (GUILayout.Button(btnLabel, btnStyle, GUILayout.Width(btnW), GUILayout.Height(segH)))
                 _rebindTarget = field;
 
@@ -1041,12 +1119,12 @@ public class GameManager : MonoBehaviour
 
         // Info label
         var savedFontSize = _panelLabelStyle.fontSize;
-        var savedColor    = _panelLabelStyle.normal.textColor;
-        _panelLabelStyle.fontSize            = Sz(14);
-        _panelLabelStyle.normal.textColor    = new Color(0.5f, 0.5f, 0.5f);
+        var savedColor = _panelLabelStyle.normal.textColor;
+        _panelLabelStyle.fontSize = Sz(14);
+        _panelLabelStyle.normal.textColor = new Color(0.5f, 0.5f, 0.5f);
         GUILayout.Label("Left Click / Right Click — not rebindable", _panelLabelStyle);
-        _panelLabelStyle.fontSize            = savedFontSize;
-        _panelLabelStyle.normal.textColor    = savedColor;
+        _panelLabelStyle.fontSize = savedFontSize;
+        _panelLabelStyle.normal.textColor = savedColor;
 
         GUILayout.Space(Sz(12f));
 
@@ -1072,10 +1150,10 @@ public class GameManager : MonoBehaviour
     private void DrawFloatingNames()
     {
         var cam = Camera.main;
-        var nm  = NetworkManager.Singleton;
+        var nm = NetworkManager.Singleton;
         if (cam == null || nm == null) return;
 
-        _levelStyle.fontSize  = Mathf.RoundToInt(13f * _guiScale);
+        _levelStyle.fontSize = Mathf.RoundToInt(13f * _guiScale);
         _levelStyle.alignment = TextAnchor.MiddleCenter;
 
         foreach (var client in nm.ConnectedClientsList)
@@ -1092,35 +1170,89 @@ public class GameManager : MonoBehaviour
             // DrawInGameHUD has no GUI.matrix — raw screen pixel space.
             // PlayerHealth bar: pivot=bottom-center, BarH=18px, anchored at screenPos.y (Unity Y-up).
             const float playerBarH = 18f;
-            float gx       = screenPos.x;
-            float barTopY  = (Screen.height - screenPos.y) - playerBarH; // IMGUI Y of bar top
+            float gx = screenPos.x;
+            float barTopY = (Screen.height - screenPos.y) - playerBarH; // IMGUI Y of bar top
 
             float labelW = 120f;
-            float nameH  = 16f;
+            float nameH = 16f;
             GUI.Label(new Rect(gx - labelW * 0.5f, barTopY - nameH - 2f, labelW, nameH), name, _levelStyle);
         }
 
         _levelStyle.alignment = TextAnchor.UpperCenter;
     }
 
+    private void DrawChat()
+    {
+        // Prune expired messages
+        float now = Time.time;
+        _chatMessages.RemoveAll(m => m.expiry < now);
+
+        float cs = GameSettings.ChatScale;
+        float lineH = 22f * cs;
+        float panelW = 360f * cs;
+        float panelX = 12f;
+        float inputH = 28f * cs;
+        float inputY = Screen.height - 60f; // above bottom bar
+        float panelH = _chatMessages.Count * lineH;
+        float logY = inputY - panelH - 4f;
+
+        // Draw message log
+        if (_chatMessages.Count > 0)
+        {
+            _chatStyle.fontSize = Mathf.RoundToInt(13f * cs);
+            DrawRect(panelX - 4f, logY - 2f, panelW + 8f, panelH + 4f, new Color(0f, 0f, 0f, 0.45f));
+            for (int i = 0; i < _chatMessages.Count; i++)
+                GUI.Label(new Rect(panelX, logY + i * lineH, panelW, lineH), _chatMessages[i].text, _chatStyle);
+        }
+
+        // Draw input bar
+        if (_chatActive)
+        {
+            _textFieldStyle.fontSize = Mathf.RoundToInt(13f * cs);
+            DrawRect(panelX - 4f, inputY - 2f, panelW + 8f, inputH + 4f, new Color(0f, 0f, 0f, 0.7f));
+            GUI.SetNextControlName("ChatInput");
+            _chatInput = GUI.TextField(new Rect(panelX, inputY, panelW, inputH), _chatInput, 120, _textFieldStyle);
+            GUI.FocusControl("ChatInput");
+
+            // Skip Enter check on the frame the field was opened (same keypress that opened it)
+            bool enter = !_chatJustOpened && Keyboard.current != null && Keyboard.current.enterKey.wasPressedThisFrame;
+
+            if (enter && _chatInput.Trim().Length > 0)
+            {
+                var nm = NetworkManager.Singleton;
+                var localPc = nm?.LocalClient?.PlayerObject?.GetComponent<PlayerController>();
+                localPc?.SendChatServerRpc(new Unity.Collections.FixedString128Bytes(_chatInput.Trim()));
+                _chatInput = "";
+                _chatActive = false;
+                ChatOpen = false;
+            }
+            else if (enter)
+            {
+                _chatInput = "";
+                _chatActive = false;
+                ChatOpen = false;
+            }
+        }
+    }
+
     private void DrawPlayerHUD()
     {
-        var nm       = NetworkManager.Singleton;
+        var nm = NetworkManager.Singleton;
         var localObj = nm?.LocalClient?.PlayerObject;
         if (localObj == null) return;
 
-        var health  = localObj.GetComponent<PlayerHealth>();
+        var health = localObj.GetComponent<PlayerHealth>();
         var shooter = localObj.GetComponent<ProjectileShooter>();
-        var pc      = localObj.GetComponent<PlayerController>();
-        var mana    = localObj.GetComponent<PlayerMana>();
-        var xp      = localObj.GetComponent<PlayerXP>();
+        var pc = localObj.GetComponent<PlayerController>();
+        var mana = localObj.GetComponent<PlayerMana>();
+        var xp = localObj.GetComponent<PlayerXP>();
 
-        int  charIdx = pc?.CharacterIndex.Value ?? 0;
-        bool isTank  = charIdx == 0;
+        int charIdx = pc?.CharacterIndex.Value ?? 0;
+        bool isTank = charIdx == 0;
 
-        var shield     = isTank ? localObj.GetComponent<ShieldAbility>()     : null;
-        var fanShot    = isTank ? localObj.GetComponent<FanShotAbility>()    : null;
-        var dash       = isTank ? null : localObj.GetComponent<DashAbility>();
+        var shield = isTank ? localObj.GetComponent<ShieldAbility>() : null;
+        var fanShot = isTank ? localObj.GetComponent<FanShotAbility>() : null;
+        var dash = isTank ? null : localObj.GetComponent<DashAbility>();
         var tripleShot = isTank ? null : localObj.GetComponent<TripleShotAbility>();
 
         Texture2D iconQ = isTank ? _iconTankQ : _iconRangerQ;
@@ -1128,45 +1260,45 @@ public class GameManager : MonoBehaviour
         Texture2D iconE = isTank ? _iconTankE : _iconRangerE;
 
         // ── Layout constants (scaled) ─────────────────────────────────────
-        float s            = _guiScale * GameSettings.BottomBarScale;
-        float padBottom    = 20f  * s;
-        float circleD      = 90f  * s;
-        float xpThickness  = 7f   * s;
-        float abilitySize  = 68f  * s;
-        float abilityGap   = 6f   * s;
-        float barH         = 14f  * s;
-        float barGap       = 5f   * s;
-        float circleColGap = 8f   * s;
+        float s = _guiScale * GameSettings.BottomBarScale;
+        float padBottom = 20f * s;
+        float circleD = 90f * s;
+        float xpThickness = 7f * s;
+        float abilitySize = 68f * s;
+        float abilityGap = 6f * s;
+        float barH = 14f * s;
+        float barGap = 5f * s;
+        float circleColGap = 8f * s;
 
-        float colH   = abilitySize + barGap + barH + barGap + barH;  // 106
-        float colW   = abilitySize * 3f + abilityGap * 2f;            // 3 abilities
+        float colH = abilitySize + barGap + barH + barGap + barH;  // 106
+        float colW = abilitySize * 3f + abilityGap * 2f;            // 3 abilities
         float totalW = circleD + circleColGap + colW;
 
-        float sw        = Screen.width;
-        float sh        = Screen.height;
-        float hudLeft   = (sw - totalW) * 0.5f;
-        float colTop    = sh - padBottom - colH;
+        float sw = Screen.width;
+        float sh = Screen.height;
+        float hudLeft = (sw - totalW) * 0.5f;
+        float colTop = sh - padBottom - colH;
         float circleTop = colTop + (colH - circleD) * 0.5f;
-        float circleR   = circleD * 0.5f;
-        var   circleC   = new Vector2(hudLeft + circleR, circleTop + circleR);
-        float abX       = hudLeft + circleD + circleColGap;
+        float circleR = circleD * 0.5f;
+        var circleC = new Vector2(hudLeft + circleR, circleTop + circleR);
+        float abX = hudLeft + circleD + circleColGap;
 
         // ── Player name above circle ──────────────────────────────────────
         var localPc = nm.LocalClient?.PlayerObject?.GetComponent<PlayerController>();
         string playerName = (localPc != null && localPc.PlayerName.Value.Length > 0)
             ? localPc.PlayerName.Value.ToString()
             : _playerName;
-        float  nameW = 100f * s, nameH = 20f * s;
+        float nameW = 100f * s, nameH = 20f * s;
         _levelStyle.fontSize = Mathf.RoundToInt(16f * s);
         GUI.Label(new Rect(circleC.x - nameW * 0.5f, circleTop - nameH - 2f, nameW, nameH),
                   playerName, _levelStyle);
 
         // ── Profile picture (empty circle) ───────────────────────────────
-        float innerR   = circleR - xpThickness - 2f;
-        int   teamIdx   = localPc?.TeamIndex.Value ?? -1;
-        Color teamColor = teamIdx == 0 ? new Color(0.2f, 0.5f,  1f,   0.9f)
-                        : teamIdx == 1 ? new Color(1f,   0.25f, 0.25f, 0.9f)
-                        :                new Color(1f,   1f,    1f,    0.9f);
+        float innerR = circleR - xpThickness - 2f;
+        int teamIdx = localPc?.TeamIndex.Value ?? -1;
+        Color teamColor = teamIdx == 0 ? new Color(0.2f, 0.5f, 1f, 0.9f)
+                        : teamIdx == 1 ? new Color(1f, 0.25f, 0.25f, 0.9f)
+                        : new Color(1f, 1f, 1f, 0.9f);
         GUI.color = teamColor;
         GUI.DrawTexture(new Rect(circleC.x - innerR, circleC.y - innerR, innerR * 2f, innerR * 2f),
                         _circleTex);
@@ -1188,22 +1320,22 @@ public class GameManager : MonoBehaviour
         string keybind1 = GameKeybinds.KeyName(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability1 : GameKeybinds.PnC_Ability1);
         DrawAbilitySlot(abX, colTop, abilitySize, s,
             iconQ,
-            shooter?.CastFraction      ?? 0f,
-            shooter?.CooldownFraction  ?? 0f,
+            shooter?.CastFraction ?? 0f,
+            shooter?.CooldownFraction ?? 0f,
             shooter?.CooldownRemaining ?? 0f,
             false,
-            shooter?.ManaCost          ?? 0f,
+            shooter?.ManaCost ?? 0f,
             keybind1);
 
         // ── Slot 2 — W (dash / shield) ───────────────────────────────────
-        float ab2X    = abX + abilitySize + abilityGap;
+        float ab2X = abX + abilitySize + abilityGap;
         string keybind2 = GameKeybinds.KeyName(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability2 : GameKeybinds.PnC_Ability2);
         if (isTank)
         {
             DrawAbilitySlot(ab2X, colTop, abilitySize, s,
                 iconW,
-                shield?.CastFraction      ?? 0f,
-                shield?.CooldownFraction  ?? 0f,
+                shield?.CastFraction ?? 0f,
+                shield?.CooldownFraction ?? 0f,
                 shield?.CooldownRemaining ?? 0f,
                 shield?.IsAiming ?? false,
                 shield?.ManaCost ?? 0f,
@@ -1213,8 +1345,8 @@ public class GameManager : MonoBehaviour
         {
             DrawAbilitySlot(ab2X, colTop, abilitySize, s,
                 iconW,
-                dash?.CastFraction      ?? 0f,
-                dash?.CooldownFraction  ?? 0f,
+                dash?.CastFraction ?? 0f,
+                dash?.CooldownFraction ?? 0f,
                 dash?.CooldownRemaining ?? 0f,
                 dash?.IsAiming ?? false,
                 dash?.ManaCost ?? 0f,
@@ -1222,35 +1354,35 @@ public class GameManager : MonoBehaviour
         }
 
         // ── Slot 3 — E (fan shot / triple shot) ──────────────────────────
-        float ab3X    = abX + (abilitySize + abilityGap) * 2f;
+        float ab3X = abX + (abilitySize + abilityGap) * 2f;
         string keybind3 = GameKeybinds.KeyName(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability3 : GameKeybinds.PnC_Ability3);
         if (isTank)
         {
             DrawAbilitySlot(ab3X, colTop, abilitySize, s,
                 iconE,
-                fanShot?.CastFraction      ?? 0f,
-                fanShot?.CooldownFraction  ?? 0f,
+                fanShot?.CastFraction ?? 0f,
+                fanShot?.CooldownFraction ?? 0f,
                 fanShot?.CooldownRemaining ?? 0f,
                 fanShot?.IsCharging ?? false,
-                fanShot?.ManaCost   ?? 0f,
+                fanShot?.ManaCost ?? 0f,
                 keybind3);
         }
         else
         {
             DrawAbilitySlot(ab3X, colTop, abilitySize, s,
                 iconE,
-                tripleShot?.CastFraction      ?? 0f,
-                tripleShot?.CooldownFraction  ?? 0f,
+                tripleShot?.CastFraction ?? 0f,
+                tripleShot?.CooldownFraction ?? 0f,
                 tripleShot?.CooldownRemaining ?? 0f,
                 tripleShot?.IsCharging ?? false,
-                tripleShot?.ManaCost   ?? 0f,
+                tripleShot?.ManaCost ?? 0f,
                 keybind3);
         }
 
         // ── Slot hover tooltip ────────────────────────────────────────────
         Vector2 mouse = Event.current.mousePosition;
         int hoveredSlot = -1;
-        if (new Rect(abX,  colTop, abilitySize, abilitySize).Contains(mouse)) hoveredSlot = 0;
+        if (new Rect(abX, colTop, abilitySize, abilitySize).Contains(mouse)) hoveredSlot = 0;
         if (new Rect(ab2X, colTop, abilitySize, abilitySize).Contains(mouse)) hoveredSlot = 1;
         if (new Rect(ab3X, colTop, abilitySize, abilitySize).Contains(mouse)) hoveredSlot = 2;
 
@@ -1258,7 +1390,7 @@ public class GameManager : MonoBehaviour
         {
             var tooltips = isTank ? TankTooltips : RangerTooltips;
             float[] slotCenters = { abX + abilitySize * 0.5f, ab2X + abilitySize * 0.5f, ab3X + abilitySize * 0.5f };
-            float[] manaCosts   = {
+            float[] manaCosts = {
                 shooter?.ManaCost ?? 0f,
                 isTank ? shield?.ManaCost ?? 0f : dash?.ManaCost ?? 0f,
                 isTank ? fanShot?.ManaCost ?? 0f : tripleShot?.ManaCost ?? 0f,
@@ -1269,29 +1401,29 @@ public class GameManager : MonoBehaviour
         }
 
         // ── Health bar ────────────────────────────────────────────────────
-        float barY       = colTop + abilitySize + barGap;
-        float curHp      = health?.CurrentHealth ?? 0f;
-        float shieldVal  = health?.ShieldHP.Value ?? 0f;
-        float maxHp      = health?.MaxHealth ?? 100f;
-        bool  atFull     = curHp >= maxHp;
-        float effMax     = (atFull && shieldVal > 0f) ? (maxHp + shieldVal) : maxHp;
-        float greenFrac  = effMax > 0f ? Mathf.Clamp01(curHp / effMax) : 0f;
+        float barY = colTop + abilitySize + barGap;
+        float curHp = health?.CurrentHealth ?? 0f;
+        float shieldVal = health?.ShieldHP.Value ?? 0f;
+        float maxHp = health?.MaxHealth ?? 100f;
+        bool atFull = curHp >= maxHp;
+        float effMax = (atFull && shieldVal > 0f) ? (maxHp + shieldVal) : maxHp;
+        float greenFrac = effMax > 0f ? Mathf.Clamp01(curHp / effMax) : 0f;
         float shieldFrac = effMax > 0f ? Mathf.Clamp01(shieldVal / effMax) : 0f;
-        float afterGrey  = Mathf.Min(1f, greenFrac + shieldFrac);
+        float afterGrey = Mathf.Min(1f, greenFrac + shieldFrac);
         DrawRect(abX, barY, colW, barH, new Color(0.08f, 0.08f, 0.08f, 0.9f));                                               // background
-        if (afterGrey < 1f)  DrawRect(abX + colW * afterGrey, barY, colW * (1f - afterGrey), barH, new Color(0.72f, 0.14f, 0.14f, 1f)); // red (missing)
-        if (shieldFrac > 0f) DrawRect(abX + colW * greenFrac,  barY, colW * shieldFrac,       barH, new Color(0.62f, 0.62f, 0.62f, 1f)); // grey (shield)
-        if (greenFrac > 0f)  DrawRect(abX,                     barY, colW * greenFrac,        barH, new Color(0.2f, 0.78f, 0.2f, 1f));   // green (health)
+        if (afterGrey < 1f) DrawRect(abX + colW * afterGrey, barY, colW * (1f - afterGrey), barH, new Color(0.72f, 0.14f, 0.14f, 1f)); // red (missing)
+        if (shieldFrac > 0f) DrawRect(abX + colW * greenFrac, barY, colW * shieldFrac, barH, new Color(0.62f, 0.62f, 0.62f, 1f)); // grey (shield)
+        if (greenFrac > 0f) DrawRect(abX, barY, colW * greenFrac, barH, new Color(0.2f, 0.78f, 0.2f, 1f));   // green (health)
 
         // Health numeric label — drawn over the bar
-        _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
+        _levelStyle.fontSize = Mathf.RoundToInt(11f * s);
         _levelStyle.alignment = TextAnchor.MiddleCenter;
-        int    hpTotal = Mathf.CeilToInt(curHp + shieldVal);
+        int hpTotal = Mathf.CeilToInt(curHp + shieldVal);
         string hpLabel = $"{hpTotal} / {Mathf.CeilToInt(effMax)}";
         GUI.Label(new Rect(abX, barY, colW, barH), hpLabel, _levelStyle);
 
         // ── Mana bar ──────────────────────────────────────────────────────
-        float manaY    = barY + barH + barGap;
+        float manaY = barY + barH + barGap;
         float manaFrac = mana?.ManaFraction ?? 1f;
         DrawRect(abX, manaY, colW, barH, new Color(0.08f, 0.08f, 0.08f, 0.9f));
         if (manaFrac > 0f) DrawRect(abX, manaY, colW * manaFrac, barH, new Color(0.12f, 0.32f, 0.82f, 1f));
@@ -1335,7 +1467,7 @@ public class GameManager : MonoBehaviour
             // Cooldown: dark overlay anchored at bottom, receding downward (icon reveals top-first)
             float blackH = cdFrac * size;
             DrawRect(x, y + size - blackH, size, blackH, new Color(0f, 0f, 0f, 0.55f));
-            _levelStyle.fontSize  = Mathf.RoundToInt(16f * s);
+            _levelStyle.fontSize = Mathf.RoundToInt(16f * s);
             _levelStyle.alignment = TextAnchor.MiddleCenter;
             GUI.Label(new Rect(x, y, size, size), cdRemaining.ToString("0.0"), _levelStyle);
             _levelStyle.alignment = TextAnchor.UpperCenter;
@@ -1344,16 +1476,16 @@ public class GameManager : MonoBehaviour
         // 4. Mana cost — top-right (hidden when 0)
         if (manaCost > 0f)
         {
-            _levelStyle.fontSize  = Mathf.RoundToInt(10f * s);
+            _levelStyle.fontSize = Mathf.RoundToInt(10f * s);
             _levelStyle.alignment = TextAnchor.UpperRight;
             string manaStr = Mathf.RoundToInt(manaCost).ToString();
-            float  manaW   = size - 3f * s;
+            float manaW = size - 3f * s;
             DrawLabelWithOutline(new Rect(x, y, manaW, manaW), manaStr, 1f);
             _levelStyle.alignment = TextAnchor.UpperCenter;
         }
 
         // 5. Keybind — bottom-left
-        _levelStyle.fontSize  = Mathf.RoundToInt(11f * s);
+        _levelStyle.fontSize = Mathf.RoundToInt(11f * s);
         _levelStyle.alignment = TextAnchor.LowerLeft;
         DrawLabelWithOutline(new Rect(x + 3f * s, y, size - 3f * s, size - 3f * s), keybind, 1f);
         _levelStyle.alignment = TextAnchor.UpperCenter;
@@ -1362,16 +1494,16 @@ public class GameManager : MonoBehaviour
     private void DrawAbilityTooltip(float slotCenterX, float slotTopY, float s,
         AbilityTooltipData data, string keybind, float manaCost)
     {
-        float pad      = 8f  * s;
-        float panelW   = 200f * s;
-        float nameH    = 16f * s;
-        float metaH    = 14f * s;
-        float statH    = !string.IsNullOrEmpty(data.Stat) ? 14f * s : 0f;
-        float descH    = 36f * s;   // word-wrapped, ~3 lines
-        float panelH   = pad * 2f + nameH + 4f * s + metaH + (statH > 0 ? 4f * s + statH : 0f) + 4f * s + descH;
+        float pad = 8f * s;
+        float panelW = 200f * s;
+        float nameH = 16f * s;
+        float metaH = 14f * s;
+        float statH = !string.IsNullOrEmpty(data.Stat) ? 14f * s : 0f;
+        float descH = 36f * s;   // word-wrapped, ~3 lines
+        float panelH = pad * 2f + nameH + 4f * s + metaH + (statH > 0 ? 4f * s + statH : 0f) + 4f * s + descH;
 
-        float panelX   = Mathf.Clamp(slotCenterX - panelW * 0.5f, 4f, Screen.width - panelW - 4f);
-        float panelY   = slotTopY - panelH - 6f * s;
+        float panelX = Mathf.Clamp(slotCenterX - panelW * 0.5f, 4f, Screen.width - panelW - 4f);
+        float panelY = slotTopY - panelH - 6f * s;
 
         // Background
         DrawRect(panelX, panelY, panelW, panelH, new Color(0.08f, 0.08f, 0.08f, 0.93f));
@@ -1385,10 +1517,10 @@ public class GameManager : MonoBehaviour
         // Ability name
         var nameStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = Mathf.RoundToInt(14f * s),
+            fontSize = Mathf.RoundToInt(14f * s),
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.UpperLeft,
-            normal    = { textColor = Color.white },
+            normal = { textColor = Color.white },
         };
         GUI.Label(new Rect(cx, cy, cw, nameH), data.Name, nameStyle);
         cy += nameH + 4f * s;
@@ -1397,9 +1529,9 @@ public class GameManager : MonoBehaviour
         string metaStr = $"[{keybind}]" + (manaCost > 0f ? $"  ·  {Mathf.RoundToInt(manaCost)} Mana" : "");
         var metaStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = Mathf.RoundToInt(11f * s),
+            fontSize = Mathf.RoundToInt(11f * s),
             alignment = TextAnchor.UpperLeft,
-            normal    = { textColor = new Color(0.6f, 0.6f, 0.6f) },
+            normal = { textColor = new Color(0.6f, 0.6f, 0.6f) },
         };
         GUI.Label(new Rect(cx, cy, cw, metaH), metaStr, metaStyle);
         cy += metaH;
@@ -1410,9 +1542,9 @@ public class GameManager : MonoBehaviour
             cy += 4f * s;
             var statStyle = new GUIStyle(GUI.skin.label)
             {
-                fontSize  = Mathf.RoundToInt(11f * s),
+                fontSize = Mathf.RoundToInt(11f * s),
                 alignment = TextAnchor.UpperLeft,
-                normal    = { textColor = new Color(1f, 0.85f, 0.3f) },
+                normal = { textColor = new Color(1f, 0.85f, 0.3f) },
             };
             GUI.Label(new Rect(cx, cy, cw, statH), data.Stat, statStyle);
             cy += statH;
@@ -1429,15 +1561,15 @@ public class GameManager : MonoBehaviour
         Color fg = _levelStyle.normal.textColor;
         var shadow = new Color(0f, 0f, 0f, 0.85f);
         _levelStyle.normal.textColor = shadow;
-        _levelStyle.hover.textColor  = shadow;
+        _levelStyle.hover.textColor = shadow;
         for (int dx = -1; dx <= 1; dx++)
-        for (int dy = -1; dy <= 1; dy++)
-        {
-            if (dx == 0 && dy == 0) continue;
-            GUI.Label(new Rect(r.x + dx * px, r.y + dy * px, r.width, r.height), text, _levelStyle);
-        }
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                if (dx == 0 && dy == 0) continue;
+                GUI.Label(new Rect(r.x + dx * px, r.y + dy * px, r.width, r.height), text, _levelStyle);
+            }
         _levelStyle.normal.textColor = fg;
-        _levelStyle.hover.textColor  = fg;
+        _levelStyle.hover.textColor = fg;
         GUI.Label(r, text, _levelStyle);
     }
 
@@ -1451,8 +1583,8 @@ public class GameManager : MonoBehaviour
     private void DrawArc(Vector2 center, float radius, float thickness,
                          float startDeg, float spanDeg, float progress, Color color)
     {
-        GUI.color  = color;
-        int total  = Mathf.Max(1, Mathf.RoundToInt(spanDeg / 360f * 96f));
+        GUI.color = color;
+        int total = Mathf.Max(1, Mathf.RoundToInt(spanDeg / 360f * 96f));
         int filled = Mathf.RoundToInt(total * Mathf.Clamp01(progress));
         float halfT = thickness * 0.5f;
         for (int i = 0; i < filled; i++)
@@ -1502,8 +1634,8 @@ public class GameManager : MonoBehaviour
             var hostTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
             ConfigureTransportForRelay(hostTransport);
             hostTransport.SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, RelayConnectionType));
-            _joinCode        = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
-            _lobbyMessage    = $"Lobby created  •  Join code: {_joinCode}";
+            _joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+            _lobbyMessage = $"Lobby created  •  Join code: {_joinCode}";
             _lobbyMessageEnd = Time.unscaledTime + 8f;
             NetworkManager.Singleton.StartHost();
             // Update() detects nm.IsHost and transitions to InGame
@@ -1518,9 +1650,9 @@ public class GameManager : MonoBehaviour
 
     private async Task StartServerWithRelayAsync()
     {
-        _relayBusy  = true;
+        _relayBusy = true;
         _relayError = "";
-        _joinCode   = "";
+        _joinCode = "";
         try
         {
             await InitializeUgsAsync();
@@ -1528,8 +1660,8 @@ public class GameManager : MonoBehaviour
             var serverTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
             ConfigureTransportForRelay(serverTransport);
             serverTransport.SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, RelayConnectionType));
-            _joinCode        = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
-            _lobbyMessage    = $"Server started  •  Join code: {_joinCode}";
+            _joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+            _lobbyMessage = $"Server started  •  Join code: {_joinCode}";
             _lobbyMessageEnd = Time.unscaledTime + 8f;
             NetworkManager.Singleton.StartServer();
             // Update() detects nm.IsServer and transitions to InGame
@@ -1623,11 +1755,11 @@ public class GameManager : MonoBehaviour
         float r = size * 0.5f;
         float r2 = r * r;
         for (int y = 0; y < size; y++)
-        for (int x = 0; x < size; x++)
-        {
-            float dx = x - r + 0.5f, dy = y - r + 0.5f;
-            tex.SetPixel(x, y, dx * dx + dy * dy <= r2 ? Color.white : Color.clear);
-        }
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - r + 0.5f, dy = y - r + 0.5f;
+                tex.SetPixel(x, y, dx * dx + dy * dy <= r2 ? Color.white : Color.clear);
+            }
         tex.Apply();
         return tex;
     }
@@ -1639,7 +1771,7 @@ public class GameManager : MonoBehaviour
 
         _titleStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 80,
+            fontSize = 64,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
             normal = { textColor = Color.white }
@@ -1655,12 +1787,12 @@ public class GameManager : MonoBehaviour
 
         _panelTitleStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 40,
+            fontSize = 40,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
-            normal    = { textColor = Color.black },
-            hover     = { textColor = Color.black },
-            active    = { textColor = Color.black }
+            normal = { textColor = Color.black },
+            hover = { textColor = Color.black },
+            active = { textColor = Color.black }
         };
 
         _buttonStyle = new GUIStyle(GUI.skin.button)
@@ -1676,9 +1808,9 @@ public class GameManager : MonoBehaviour
 
         _hudLabelStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 18,
+            fontSize = 18,
             alignment = TextAnchor.MiddleRight,
-            normal    = { textColor = new Color(0.65f, 0.65f, 0.65f) }
+            normal = { textColor = new Color(0.65f, 0.65f, 0.65f) }
         };
 
         _toggleStyle = new GUIStyle(GUI.skin.toggle)
@@ -1711,34 +1843,34 @@ public class GameManager : MonoBehaviour
 
         _joinCodeStyle = new GUIStyle(GUI.skin.button)
         {
-            fontSize  = 40,
+            fontSize = 40,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
-            normal    = { textColor = Color.black },
-            hover     = { textColor = Color.black },
-            active    = { textColor = Color.black }
+            normal = { textColor = Color.black },
+            hover = { textColor = Color.black },
+            active = { textColor = Color.black }
         };
 
         _smallButtonStyle = new GUIStyle(GUI.skin.button)
         {
-            fontSize  = 14,
+            fontSize = 14,
             fontStyle = FontStyle.Normal
         };
 
         _announcementStyle = new GUIStyle(GUI.skin.box)
         {
-            fontSize  = 28,
+            fontSize = 28,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
-            normal    = { textColor = Color.white }
+            normal = { textColor = Color.white }
         };
 
         _levelStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize  = 16,
+            fontSize = 16,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.UpperCenter,
-            normal    = { textColor = Color.white }
+            normal = { textColor = Color.white }
         };
 
         var sectionColor = new Color(0.25f, 0.25f, 0.25f);
@@ -1782,9 +1914,17 @@ public class GameManager : MonoBehaviour
 
         _tooltipStyle = new GUIStyle(GUI.skin.label)
         {
-            wordWrap  = true,
+            wordWrap = true,
             alignment = TextAnchor.UpperLeft,
-            normal    = { textColor = new Color(0.85f, 0.85f, 0.85f) },
+            normal = { textColor = new Color(0.85f, 0.85f, 0.85f) },
+        };
+
+        _chatStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 13,
+            alignment = TextAnchor.MiddleLeft,
+            wordWrap = false,
+            normal = { textColor = Color.white },
         };
     }
 }

@@ -74,6 +74,7 @@ public class ProjectileShooter : NetworkBehaviour
         if (Mouse.current == null) return;
         if (_health == null) _health = GetComponent<PlayerHealth>();
         if (_health != null && _health.IsDead) return;
+        if (GameManager.ChatOpen) return;
 
         if (Keyboard.current == null) return;
         bool firePressed  = GameSettings.UseWasd

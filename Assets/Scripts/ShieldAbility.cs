@@ -100,6 +100,7 @@ public class ShieldAbility : NetworkBehaviour
         if (Keyboard.current == null) return;
         if (_pc != null && _pc.CharacterIndex.Value != 0) return;  // Tank only
         if (_health != null && _health.IsDead) return;
+        if (GameManager.ChatOpen) return;
 
         bool pressed  = GameSettings.UseWasd
             ? GameKeybinds.WasPressedThisFrame(GameKeybinds.Wasd_Ability2)

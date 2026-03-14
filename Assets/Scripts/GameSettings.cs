@@ -12,4 +12,7 @@ public static class GameSettings
 
     /// <summary>Scale multiplier for the procedural cursor textures in AutoAttacker.</summary>
     public static float CursorScale = 1f;
+
+    /// <summary>Scale multiplier for the in-game chat panel.</summary>
+    public static float ChatScale = 1f;
 }

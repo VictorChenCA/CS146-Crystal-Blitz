@@ -33,7 +33,7 @@ public class DummyHints : NetworkBehaviour
         go.transform.localPosition = new Vector3(0f, hintHeight, 0f);
 
         _hintText           = go.AddComponent<TextMeshPro>();
-        _hintText.text      = "Right-click to attack!";
+        _hintText.text      = "Tutorial: Right-click to auto attack!";
         _hintText.fontSize  = fontSize;
         _hintText.alignment = TextAlignmentOptions.Center;
         _hintText.color     = Color.white;

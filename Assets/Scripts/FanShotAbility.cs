@@ -92,6 +92,7 @@ public class FanShotAbility : NetworkBehaviour
         if (_pc != null && _pc.CharacterIndex.Value != 0) { CancelCharge(); return; }  // Tank only
         if (_health == null) _health = GetComponent<PlayerHealth>();
         if (_health != null && _health.IsDead) return;
+        if (GameManager.ChatOpen) return;
 
         bool pressed  = GameKeybinds.WasPressedThisFrame(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability3 : GameKeybinds.PnC_Ability3);
         bool released = GameKeybinds.WasReleasedThisFrame(GameSettings.UseWasd ? GameKeybinds.Wasd_Ability3 : GameKeybinds.PnC_Ability3);

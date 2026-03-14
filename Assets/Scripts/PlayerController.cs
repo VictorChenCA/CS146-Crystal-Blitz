@@ -5,6 +5,10 @@ using Unity.Netcode;
 
 public class PlayerController : NetworkBehaviour
 {
+    // ── Chat ──────────────────────────────────────────────────────────────────
+    public static event System.Action<string> OnChatMessage;
+
+
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 8f;
 
@@ -249,17 +253,21 @@ public class PlayerController : NetworkBehaviour
     {
         if (Keyboard.current == null) return;
 
-        if (GameSettings.UseWasd)
+        if (!GameManager.ChatOpen)
         {
-            HandleWasdMovement();
-            SyncNavPosition();   // sync AA-chase movement in WASD mode
-        }
-        else
-        {
-            SyncNavMovement();
+            if (GameSettings.UseWasd)
+            {
+                HandleWasdMovement();
+                SyncNavPosition();   // sync AA-chase movement in WASD mode
+            }
+            else
+            {
+                SyncNavMovement();
+            }
+
+            HandleRightClickInput();
         }
 
-        HandleRightClickInput();
         UpdateClickIndicator();
     }
 
@@ -447,6 +455,19 @@ public class PlayerController : NetworkBehaviour
     public void ForceSubmitPosition(Vector3 pos) => SubmitPositionServerRpc(pos);
 
     // ── Server RPC ────────────────────────────────────────────────────────────
+
+    [ServerRpc]
+    public void SendChatServerRpc(Unity.Collections.FixedString128Bytes msg)
+    {
+        string name = PlayerName.Value.Length > 0 ? PlayerName.Value.ToString() : "Player";
+        BroadcastChatRpc(new Unity.Collections.FixedString64Bytes(name), msg);
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void BroadcastChatRpc(Unity.Collections.FixedString64Bytes senderName, Unity.Collections.FixedString128Bytes msg)
+    {
+        OnChatMessage?.Invoke($"{senderName}: {msg}");
+    }
 
     [Rpc(SendTo.Server)]
     private void SubmitPositionServerRpc(Vector3 newPosition, RpcParams rpcParams = default)
