@@ -10,6 +10,27 @@ using Unity.Netcode;
 /// </summary>
 public class TutorialManager : MonoBehaviour
 {
+    // ── Singleton ─────────────────────────────────────────────────────────────
+    private static TutorialManager _instance;
+
+    /// <summary>
+    /// Destroys any existing TutorialManager, clears the completion flag, and
+    /// spawns a fresh one. Call this whenever the local player joins a new session.
+    /// </summary>
+    public static void StartNewSession()
+    {
+        if (_instance != null)
+        {
+            Destroy(_instance.gameObject);
+            _instance = null;
+        }
+        PlayerPrefs.DeleteKey("nrtm_tutorial_done");
+
+        var go = new GameObject("[TutorialManager]");
+        DontDestroyOnLoad(go);
+        go.AddComponent<TutorialManager>();
+    }
+
     // ── Static hooks (null-safe from call sites) ──────────────────────────────
     public static Action OnAutoAttackHit;
     public static Action OnQFired;
@@ -79,12 +100,21 @@ public class TutorialManager : MonoBehaviour
     private void OnDestroy()
     {
         _dummyHints?.HideTutorialMessage();
+        if (_instance == this) _instance = null;
+    }
+
+    private void Awake()
+    {
+        _instance = this;
     }
 
     private void Start()
     {
         _step    = TutorialStep.WaitForAA;
         _visible = false;
+
+        // Reset DummyHints so the AA hint re-appears for this session
+        FindObjectOfType<DummyHints>()?.ResetHint();
     }
 
     // ── Update ────────────────────────────────────────────────────────────────

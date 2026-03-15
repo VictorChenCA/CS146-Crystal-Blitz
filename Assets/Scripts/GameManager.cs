@@ -64,6 +64,11 @@ public class GameManager : MonoBehaviour
     private float _cursorScale = 1f;
     private float _chatScale = 1f;
 
+    // ── Lobby hat selector state ──────────────────────────────────────────────
+    private int   _lobbyHatPreview     = -1;
+    private int   _lobbyHatLastApplied = -2;   // sentinel to detect O/P key changes
+    private float _hatLockedPopupEnd   = -1f;
+
     // ── Settings panel state ──────────────────────────────────────────────────
     private int _settingsTab = 0;   // 0=General 1=Graphics 2=Keybinds
     private int _keybindTab = 0;   // 0=WASD 1=P&C
@@ -453,11 +458,13 @@ public class GameManager : MonoBehaviour
 
             if (GUILayout.Button("Host", _buttonStyle))
             {
+                TutorialManager.StartNewSession();
                 SetTransport("0.0.0.0", _port);
                 NetworkManager.Singleton.StartHost();
             }
             if (GUILayout.Button("Client", _buttonStyle))
             {
+                TutorialManager.StartNewSession();
                 SetTransport(_hostIp, _port);
                 NetworkManager.Singleton.StartClient();
             }
@@ -585,6 +592,10 @@ public class GameManager : MonoBehaviour
         DrawPlayerHUD();
         DrawFloatingNames();
         DrawChat();
+
+        var gpmHat = GamePhaseManager.Instance;
+        if (gpmHat != null && gpmHat.Phase.Value == GamePhaseManager.GamePhase.Lobby)
+            DrawHatSelector();
 
         // Optional HUD: top-right corner
         if (!_showFps && !_showConnectionStatus && !_showLatency) return;
@@ -1235,6 +1246,94 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private void DrawHatSelector()
+    {
+        var nm = NetworkManager.Singleton;
+        var localObj = nm?.LocalClient?.PlayerObject;
+        if (localObj == null) return;
+
+        var hatMgr = localObj.GetComponent<HatManager>();
+        if (hatMgr == null) return;
+
+        // Sync preview if O/P key changed the hat externally
+        if (hatMgr.CurrentHat != _lobbyHatLastApplied)
+        {
+            _lobbyHatPreview     = hatMgr.CurrentHat;
+            _lobbyHatLastApplied = hatMgr.CurrentHat;
+        }
+
+        float g  = _guiScale;
+        float x  = 10f;
+        float y  = 10f;
+        float pw = 170f * g;
+        float row1H = 32f * g;
+        float row2H = 26f * g;
+        float ph = row1H + row2H + 6f * g;   // small padding
+
+        // Background
+        DrawRect(x - 4f, y - 4f, pw + 8f, ph + 8f, new Color(0f, 0f, 0f, 0.55f));
+
+        float btnW  = 32f * g;
+        float nameW = pw - 2f * btnW;
+
+        bool locked = _lobbyHatPreview >= 6;
+        string hatName = hatMgr.GetHatName(_lobbyHatPreview);
+
+        // ── Row 1: ◄  name  ► ────────────────────────────────────────────────
+        _hudLabelStyle.fontSize   = Sz(14f);
+        _hudLabelStyle.alignment  = TextAnchor.MiddleCenter;
+
+        if (GUI.Button(new Rect(x, y, btnW, row1H), "◄"))
+        {
+            _lobbyHatPreview--;
+            if (_lobbyHatPreview < -1) _lobbyHatPreview = hatMgr.HatCount - 1;
+        }
+
+        // Name label
+        Rect nameRect = new Rect(x + btnW, y, nameW, row1H);
+        GUI.Label(nameRect, locked ? "" : hatName, _hudLabelStyle);
+        if (locked)
+            GUI.Label(nameRect, "🔒", _hudLabelStyle);
+
+        if (GUI.Button(new Rect(x + btnW + nameW, y, btnW, row1H), "►"))
+        {
+            _lobbyHatPreview++;
+            if (_lobbyHatPreview >= hatMgr.HatCount) _lobbyHatPreview = -1;
+        }
+
+        // ── Row 2: USE button ─────────────────────────────────────────────────
+        float useW = 100f * g;
+        float useX = x + (pw - useW) * 0.5f;
+        float useY = y + row1H + 2f * g;
+
+        if (GUI.Button(new Rect(useX, useY, useW, row2H), "USE"))
+        {
+            if (locked)
+                _hatLockedPopupEnd = Time.time + 2.5f;
+            else
+            {
+                hatMgr.SelectHat(_lobbyHatPreview);
+                _lobbyHatLastApplied = _lobbyHatPreview;
+            }
+        }
+
+        // ── Locked popup ──────────────────────────────────────────────────────
+        if (Time.time < _hatLockedPopupEnd)
+        {
+            float popW = 240f * g;
+            float popH = 36f * g;
+            float popX = x;
+            float popY = y + ph + 8f;
+            DrawRect(popX, popY, popW, popH, new Color(0f, 0f, 0f, 0.80f));
+            _hudLabelStyle.fontSize  = Sz(12f);
+            _hudLabelStyle.alignment = TextAnchor.MiddleCenter;
+            GUI.Label(new Rect(popX, popY, popW, popH), "This cosmetic must be purchased!", _hudLabelStyle);
+        }
+
+        // Reset alignment
+        _hudLabelStyle.alignment = TextAnchor.UpperLeft;
+    }
+
     private void DrawPlayerHUD()
     {
         var nm = NetworkManager.Singleton;
@@ -1637,6 +1736,7 @@ public class GameManager : MonoBehaviour
             _joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
             _lobbyMessage = $"Lobby created  •  Join code: {_joinCode}";
             _lobbyMessageEnd = Time.unscaledTime + 8f;
+            TutorialManager.StartNewSession();
             NetworkManager.Singleton.StartHost();
             // Update() detects nm.IsHost and transitions to InGame
         }
@@ -1686,6 +1786,7 @@ public class GameManager : MonoBehaviour
             var clientTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
             ConfigureTransportForRelay(clientTransport);
             clientTransport.SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, RelayConnectionType));
+            TutorialManager.StartNewSession();
             NetworkManager.Singleton.StartClient();
         }
         catch (System.Exception e)

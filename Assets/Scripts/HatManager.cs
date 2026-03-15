@@ -58,6 +58,15 @@ public class HatManager : NetworkBehaviour
         }
     }
 
+    // ── Public API for lobby hat selector UI ──────────────────────────────────
+    public int    HatCount              => _hatPrefabs != null ? _hatPrefabs.Length : 0;
+    public int    CurrentHat            => _hatIndex.Value;
+    public string GetHatName(int index) => index < 0 ? "None"
+                                         : (index < _hatPrefabs.Length && _hatPrefabs[index] != null)
+                                           ? _hatPrefabs[index].name
+                                           : $"Hat {index + 1}";
+    public void   SelectHat(int index)  => RequestHatServerRpc(index);
+
     [Rpc(SendTo.Server)]
     private void RequestHatServerRpc(int index)
     {

@@ -93,6 +93,17 @@ public class DummyHints : NetworkBehaviour
             _tutorialRoot.gameObject.SetActive(false);
     }
 
+    /// <summary>Resets the AA hint for a new tutorial session.</summary>
+    public void ResetHint()
+    {
+        _hintHidden = false;
+        _hintText.gameObject.SetActive(true);
+        _hintText.color = new Color(_hintText.color.r, _hintText.color.g, _hintText.color.b, 1f);
+        if (_pulseCoroutine != null) StopCoroutine(_pulseCoroutine);
+        _pulseCoroutine = StartCoroutine(PulseHint());
+        HideTutorialMessage();
+    }
+
     /// <summary>Called by TrainingDummy (server-side) when an auto-attack hits.</summary>
     public void NotifyAutoAttackHit(ulong shooterClientId)
     {
